@@ -13,6 +13,7 @@ from dataset import ISICDataset
 from losses import BCEDiceLoss
 from metrics import dice_score
 from models import BVINet
+from transforms import get_train_augment
 
 
 def run_epoch(model, loader, criterion, optimizer, device, train=True):
@@ -41,15 +42,15 @@ def main():
     ap.add_argument("--epochs", type=int, default=50)
     ap.add_argument("--batch_size", type=int, default=64)
     ap.add_argument("--lr", type=float, default=0.001)
-    ap.add_argument("--patience", type=int, default=5)
+    ap.add_argument("--patience", type=int, default=15)  # 5 stopped training too early in testing
     ap.add_argument("--out_dir", default="checkpoints")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    train_ds = ISICDataset(args.data_dir, split="train")
-    val_ds = ISICDataset(args.data_dir, split="val")
+    train_ds = ISICDataset(args.data_dir, split="train", augment=get_train_augment())
+    val_ds = ISICDataset(args.data_dir, split="val")  # no augmentation for honest evaluation
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
 
@@ -59,6 +60,9 @@ def main():
 
     criterion = BCEDiceLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", factor=0.5, patience=3
+    )  # halves lr if val_dice plateaus for 3 epochs, squeezes out extra gains before early stop
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True)
@@ -67,9 +71,11 @@ def main():
     for epoch in range(1, args.epochs + 1):
         train_loss, train_dice = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
         val_loss, val_dice = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
+        scheduler.step(val_dice)
 
+        current_lr = optimizer.param_groups[0]["lr"]
         print(f"Epoch {epoch:02d} | train_loss={train_loss:.4f} train_dice={train_dice:.4f} "
-              f"| val_loss={val_loss:.4f} val_dice={val_dice:.4f}")
+              f"| val_loss={val_loss:.4f} val_dice={val_dice:.4f} | lr={current_lr:.6f}")
 
         if val_dice > best_dice:
             best_dice = val_dice

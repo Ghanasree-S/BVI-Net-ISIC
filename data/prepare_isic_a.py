@@ -17,7 +17,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw_dir", default=str(Path(__file__).parent / "isic2018_raw"))
     ap.add_argument("--out_dir", default=str(Path(__file__).parent / "isic2018a"))
-    ap.add_argument("--fraction", type=float, default=0.25)
+    ap.add_argument("--fraction", type=float, default=1.0,
+                     help="1.0 = full ISIC2018 (matches paper's Table V); 0.25 = ISIC2018-a subset")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--splits", type=float, nargs=3, default=(0.8, 0.1, 0.1),
                      help="train/val/test fractions")
