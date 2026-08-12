@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/isic2018_raw/
+data/isic2018a/
+checkpoints/
+outputs/
+.ipynb_checkpoints/

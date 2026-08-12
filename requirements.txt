@@ -1,0 +1,15 @@
+torch>=2.0
+torchvision>=0.15
+numpy
+pillow
+opencv-python
+scikit-image
+scikit-learn
+tqdm
+matplotlib
+
+# Optional: real selective-scan Mamba backend for the Global Pathway.
+# If this fails to install/build (common on Colab), fa_vssm.py automatically
+# falls back to a depthwise-conv approximation -- everything else still works.
+# mamba-ssm
+# causal-conv1d
