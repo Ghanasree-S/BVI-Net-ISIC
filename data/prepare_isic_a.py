@@ -25,8 +25,17 @@ def main():
     args = ap.parse_args()
 
     raw = Path(args.raw_dir)
-    img_dir = next(raw.glob("*Training_Input*"))
-    mask_dir = next(raw.glob("*Training_GroundTruth*"))
+    try:
+        img_dir = next(raw.rglob("*Training_Input*"))
+        mask_dir = next(raw.rglob("*Training_GroundTruth*"))
+    except StopIteration:
+        print(f"Could not find Training_Input / Training_GroundTruth under {raw}")
+        print("Directory tree found:")
+        for p in sorted(raw.rglob("*"))[:50]:
+            print(" ", p)
+        raise
+    img_dir = img_dir if img_dir.is_dir() else img_dir.parent
+    mask_dir = mask_dir if mask_dir.is_dir() else mask_dir.parent
 
     images = sorted(p for p in img_dir.glob(f"*{IMG_SUFFIX}"))
     random.Random(args.seed).shuffle(images)
