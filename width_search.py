@@ -54,6 +54,15 @@ def main():
     ap.add_argument("--out_json", default="width_search_results.json")
     args = ap.parse_args()
 
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        free, total = torch.cuda.mem_get_info()
+        print(f"GPU memory free: {free / 1e9:.2f} GB / {total / 1e9:.2f} GB total")
+        if free / total < 0.5:
+            print("WARNING: less than half the GPU memory is free. If this is the start "
+                  "of a fresh script run, a previous process likely still holds memory -- "
+                  "restart the Kaggle/Colab kernel before continuing.")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -64,6 +73,8 @@ def main():
 
     results = []
     for name, channels, gcn_nodes in CONFIGS:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()  # release previous config's activations before starting next
         print(f"\n=== {name} ===")
         model = BVINet(channels=channels, gcn_nodes=gcn_nodes).to(device)
         n_params = sum(p.numel() for p in model.parameters())
@@ -87,6 +98,10 @@ def main():
             "params_M": round(n_params / 1e6, 4),
             "best_val_dice": round(best_dice, 4),
         })
+
+        del model, optimizer, criterion  # free this config's GPU memory before the next one
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     print("\n=== Width search summary ===")
     print(f"{'Config':38s} {'Params (M)':>12s} {'Best Val Dice':>15s}")
