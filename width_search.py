@@ -19,10 +19,11 @@ from models import BVINet
 from transforms import get_train_augment
 
 # Each entry: (name, channels list, gcn_nodes). Smaller widths as we go down.
+# Every channel count must be divisible by 4 (one per Gabor orientation: 0/45/90/135deg).
 CONFIGS = [
     ("current (8-16-32-64-128, N=32)", [8, 16, 32, 64, 128], 32),
     ("narrow-1 (4-8-16-32-64, N=16)", [4, 8, 16, 32, 64], 16),
-    ("narrow-2 (2-4-8-16-32, N=8)", [2, 4, 8, 16, 32], 8),
+    ("narrow-2 (4-8-8-16-16, N=8)", [4, 8, 8, 16, 16], 8),
 ]
 
 
