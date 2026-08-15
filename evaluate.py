@@ -33,10 +33,13 @@ def main():
     ap.add_argument("--data_dir", default="data/isic2018a")
     ap.add_argument("--visualize", action="store_true")
     ap.add_argument("--out_dir", default="outputs")
+    ap.add_argument("--channels", type=int, nargs=5, default=None,
+                     help="Must match the widths used when the checkpoint was trained")
+    ap.add_argument("--gcn_nodes", type=int, default=32)
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = BVINet().to(device)
+    model = BVINet(channels=args.channels, gcn_nodes=args.gcn_nodes).to(device)
     model.load_state_dict(torch.load(args.checkpoint, map_location=device))
     model.eval()
 

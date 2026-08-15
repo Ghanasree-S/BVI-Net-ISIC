@@ -1,5 +1,5 @@
-torch>=2.0
-torchvision>=0.15
+torch==2.3.0
+torchvision==0.18.0
 numpy
 pillow
 opencv-python
@@ -10,7 +10,11 @@ matplotlib
 albumentations
 
 # Optional: real selective-scan Mamba backend for the Global Pathway.
+# Requires Linux + CUDA toolkit (nvcc) matching the torch build above --
+# pinned versions matter, mamba-ssm's compiled extension is ABI-sensitive
+# to the exact torch version it was built against.
 # If this fails to install/build (common on Colab), fa_vssm.py automatically
 # falls back to a depthwise-conv approximation -- everything else still works.
-# mamba-ssm
-# causal-conv1d
+# transformers==4.40.2  # mamba_ssm's __init__ imports legacy transformers.generation classes
+# causal-conv1d==1.4.0
+# mamba-ssm==2.2.2

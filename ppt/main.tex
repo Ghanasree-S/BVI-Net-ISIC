@@ -1,0 +1,475 @@
+% ============================================================
+%  BVI-Net Replication -- Final Review
+%  Built on the UFES / Madrid Beamer template.
+%
+%  TO DO BEFORE COMPILING:
+%   1. Fill in the <<FILL>> markers (your name, guide, department)
+%   2. Create an imagens/ subfolder containing:
+%        imagens/qualitative.png      - image / GT / prediction triptychs
+%                                        (screenshot from evaluate.py --visualize output)
+%        imagens/logo.pdf             - your institution logo (optional)
+%      (architecture diagram, training curve and parameter chart are
+%       drawn directly in LaTeX below -- no external image needed for those)
+%   3. Keep referencias.bib in this same folder
+%   4. Compile: pdflatex -> bibtex -> pdflatex -> pdflatex
+% ============================================================
+
+\documentclass[11pt]{beamer}
+\usetheme{Madrid}
+\usefonttheme{serif}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\DeclareMathOperator{\sen}{sen}
+\DeclareMathOperator{\tg}{tg}
+
+\setbeamertemplate{caption}[numbered]
+
+\author[Team 19]{Bavesh Raam S (CB.SC.U4AIE23016) \\
+Ghanasree S (CB.SC.U4AIE23028) \\
+Neha Jacob (CB.SC.U4AIE23046) \\
+Prem Kumar R (CB.SC.U4AIE23052) \\[4pt]
+Guide: Prof. <<FILL: Guide name>>}
+\title[22AIE437 -- Medical Image Processing]{Replication and Critical Analysis of BVI-Net:
+An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
+\setbeamertemplate{navigation symbols}{}
+\institute[]{AMRITA VISHWA VIDYAPEETHAM \par AMRITA SCHOOL OF ARTIFICIAL INTELLIGENCE
+\par}
+\date{August 17, 2026}
+
+% ---------------------------------------------------------
+\bibliographystyle{apalike}
+% ---------------------------------------------------------
+
+\begin{document}
+
+\begin{frame}
+\begin{center}
+\small \textbf{22AIE437 -- Medical Image Processing}
+\end{center}
+\titlepage
+\end{frame}
+
+\begin{frame}{Contents}
+\tableofcontents
+\end{frame}
+
+% ============================================================
+\section{Introduction}
+% ============================================================
+
+\begin{frame}{Introduction \& Motivation}
+    \begin{block}{Medical Image Segmentation}
+    \begin{itemize}
+        \item Helps clinicians localise lesions in dermoscopy, CT and MRI images.
+        \item Accuracy has been pursued by scaling models up: U-Net requires
+              $13.4$M parameters and VM-UNet $44.3$M.
+        \item Such models exceed the hardware available in real clinical
+              settings, creating a deployment gap.
+    \end{itemize}
+    \end{block}
+
+    \bigskip
+
+    \begin{block}{Motivation}
+    \begin{itemize}
+        \item Portable / point-of-care diagnostic devices need models that are
+              both \textbf{accurate} and \textbf{lightweight}.
+        \item Biologically-inspired designs (dual visual pathways) are a
+              promising, under-explored direction for this trade-off.
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Problem Statement}
+    \begin{block}{The Problem}
+    \begin{itemize}
+        \item Medical images have \textbf{blurred lesion boundaries}, making
+              precise pixel-level segmentation difficult.
+        \item Lesion size varies drastically, causing a
+              \textbf{global--local feature imbalance}.
+        \item Large deep models \textbf{overfit} on limited medical data and
+              are too heavy for edge/clinical deployment.
+    \end{itemize}
+    \end{block}
+
+    \bigskip
+
+    \begin{block}{Task Addressed}
+    Build and validate an \textbf{ultra-lightweight} segmentation network
+    that stays accurate on \textbf{skin lesion (ISIC2018)} images despite the
+    above challenges.
+    \end{block}
+\end{frame}
+
+
+\begin{frame}{Base Paper --- BVI-Net}
+    BVI-Net imitates the biological visual system: a fast \textbf{dorsal}
+    stream for global context and a detail-sensitive \textbf{ventral} stream
+    for local features, running in parallel, with the global pathway guiding
+    the local one towards the lesion.
+
+    \medskip
+
+    \begin{itemize}
+        \item \textbf{Local Pathway (ventral):} convolution kernels initialised
+              by the Gabor function, modelling V1 orientation selectivity, with
+              weights shared across four orientations.
+        \item \textbf{Global Pathway (dorsal, FA-VSSM):} pooling attention
+              gating a state space model, scanned four ways for global context
+              at linear complexity.
+        \item \textbf{GCN Attention skips:} features projected into a graph to
+              link non-adjacent regions, then mapped back during upsampling.
+    \end{itemize}
+
+    \medskip
+
+    \begin{center}
+    \alert{Reported: $0.026$M parameters $\mid$ $0.025$ GFLOPs $\mid$
+    $292$ FPS}
+    \end{center}
+\end{frame}
+
+\begin{frame}{What We Did}
+    \begin{itemize}
+        \item Reimplemented BVI-Net \textbf{from scratch in PyTorch} --- no
+              official code released by the authors.
+        \item Reconstructed all three components: Gabor-init Local Pathway,
+              FA-VSSM Global Pathway (real Mamba selective-scan), GCN-Attention
+              skip connections.
+        \item Trained and evaluated on full \textbf{ISIC2018} (2594 images),
+              matching the paper's loss, optimizer and training protocol.
+        \item Compared our results \textbf{directly against the paper's own
+              reported numbers} for skin lesion segmentation.
+    \end{itemize}
+\end{frame}
+
+
+% ============================================================
+\section{Research Gap}
+% ============================================================
+
+\begin{frame}{Research Gap}
+    Lightweight models already exist, but each trades away something:
+
+    \medskip
+
+    \begin{itemize}
+        \item MALUNet ($0.178$M), EGE-UNet ($0.053$M) and UltraLight VM-UNet
+              ($0.049$M) cut parameters sharply.
+        \item CNN-based lightweight models fuse global context poorly and
+              converge to local optima.
+        \item Mamba/SSM-based models capture global context, but miss local
+              detail and fail on very small lesions.
+    \end{itemize}
+
+    \medskip
+
+    \begin{block}{Gap Identified}
+    No existing model balances global context and fine local detail at an
+    ultra-lightweight scale. BVI-Net claims to do so at $0.026$M parameters,
+    but \emph{publishes no code}, leaving the claim unverified.
+    \end{block}
+\end{frame}
+
+
+% ============================================================
+\section{Objectives}
+% ============================================================
+
+\begin{frame}{Objectives and Scope}
+    \begin{block}{Objectives}
+    \begin{enumerate}
+        \item Reimplement BVI-Net from its published description, since no
+              reference implementation is available.
+        \item Reproduce its reported performance on ISIC2018.
+        \item Verify the claimed $0.026$M parameter budget, then diagnose and
+              explain any discrepancy.
+    \end{enumerate}
+    \end{block}
+
+    \bigskip
+
+    \begin{block}{Scope}
+    \begin{itemize}
+        \item \textbf{Dataset:} ISIC2018 --- $2594$ dermoscopy images at
+              $256 \times 256$.
+        \item \textbf{Task:} Binary skin lesion segmentation.
+        \item \textbf{Excluded:} LiTS17 and BraTS19 tasks; reimplementation of
+              the SOTA baselines.
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+
+% ============================================================
+\section{Methodology}
+% ============================================================
+
+\begin{frame}{Dataset and Preprocessing}
+    \begin{block}{Dataset}
+    \textbf{ISIC2018 Task 1} --- $2594$ dermoscopy images with
+    expert-annotated lesion masks.
+    \end{block}
+
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{c|c|c|c}
+            \hline
+            \textbf{Split} & \textbf{Train} & \textbf{Validation} & \textbf{Test} \\ \hline
+            This work  & 2075 & 259 & 260  \\ \hline
+            Base paper & 2594 & 100 & 1000 \\ \hline
+        \end{tabular}
+    \end{table}
+
+    \medskip
+
+    \begin{block}{Preprocessing}
+    \begin{itemize}
+        \item Images resized to $256 \times 256$ using bilinear interpolation.
+        \item Masks resized using nearest-neighbour interpolation and binarised.
+        \item \textbf{Training only:} flips, $90^{\circ}$ rotations,
+              shift--scale--rotate, brightness/contrast/HSV jitter.
+        \item \textbf{Validation \& test:} no augmentation, for unbiased
+              evaluation.
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+% ---------- Architecture ----------
+\begin{frame}{BVI-Net Architecture}
+    \begin{center}
+    \begin{tikzpicture}[
+        scale=0.85, transform shape,
+        box/.style={draw, rounded corners, align=center, font=\small,
+                    minimum height=0.85cm, minimum width=2.8cm},
+        arr/.style={-{Stealth[length=2mm]}, thick}
+    ]
+        \node[box] (in)    at ( 0.0,  3.6) {Input image};
+        \node[box] (local) at (-2.6,  2.0) {Local Pathway\\(Gabor convolution)};
+        \node[box] (glob)  at ( 2.6,  2.0) {Global Pathway\\(FA-VSSM)};
+        \node[box] (fuse)  at ( 0.0,  0.3) {Feature fusion};
+        \node[box] (dec)   at ( 0.0, -1.2) {Decoder\\(GCN-attention skips)};
+        \node[box] (out)   at ( 0.0, -2.8) {Segmentation mask};
+
+        \draw[arr] (in)    -- (local);
+        \draw[arr] (in)    -- (glob);
+        \draw[arr] (local) -- (fuse);
+        \draw[arr] (glob)  -- (fuse);
+        \draw[arr] (glob)  -- node[above, font=\scriptsize] {guides} (local);
+        \draw[arr] (fuse)  -- (dec);
+        \draw[arr] (dec)   -- (out);
+    \end{tikzpicture}
+    \end{center}
+
+    \begin{center}
+    {\footnotesize Encoder repeated over 5 stages; the Global Pathway guides
+    the Local Pathway to the lesion region.}
+    \end{center}
+\end{frame}
+
+
+
+% ---------- Implementation ----------
+\begin{frame}{Implementation and Training}
+    \begin{block}{Implementation}
+    BVI-Net reimplemented in PyTorch from the paper's textual description ---
+    no official reference implementation was available. Trained on Kaggle
+    (T4 GPU) using the real \texttt{mamba-ssm} selective-scan backend.
+    \end{block}
+
+    \bigskip
+
+    \begin{table}
+        \centering
+        \begin{tabular}{c|c}
+            \hline
+            \textbf{Setting} & \textbf{Value} \\ \hline
+            Loss           & BCE + Dice \\ \hline
+            Optimizer      & AdamW \\ \hline
+            Learning Rate  & 0.001 \\ \hline
+            Batch Size     & 64 \\ \hline
+            Epochs         & 50 \\ \hline
+            Early Stopping & Patience = 15 \\ \hline
+            LR Scheduler   & $\times 0.5$ on validation-Dice plateau \\ \hline
+        \end{tabular}
+    \end{table}
+
+\end{frame}
+
+\begin{frame}{Training Curve}
+    \begin{center}
+    \begin{tikzpicture}
+        \begin{axis}[
+            width=10cm, height=6cm,
+            xlabel={Epoch}, ylabel={Dice},
+            legend pos=south east,
+            grid=major, grid style={dashed, gray!30},
+            ymin=0.4, ymax=0.9
+        ]
+        \addplot[thick, blue] coordinates {
+            (1,0.4216)(5,0.7303)(10,0.8028)(15,0.8150)(20,0.8274)
+            (25,0.8331)(30,0.8363)(35,0.8417)(37,0.8440)(38,0.8527)
+            (42,0.8562)(46,0.8522)(49,0.8600)(50,0.8604)
+        };
+        \addlegendentry{Train Dice}
+        \addplot[thick, red] coordinates {
+            (1,0.5697)(5,0.7487)(10,0.7814)(15,0.7930)(20,0.8110)
+            (25,0.8240)(30,0.8339)(33,0.8346)(37,0.8287)(38,0.8435)
+            (42,0.8493)(46,0.8453)(49,0.8514)(50,0.8356)
+        };
+        \addlegendentry{Val Dice}
+        \end{axis}
+    \end{tikzpicture}
+    \end{center}
+    {\footnotesize LR drops at epoch 37 ($\to 0.0005$) and epoch 46
+    ($\to 0.00025$) visibly push validation Dice to new bests --- confirms
+    the scheduler is working as intended. No overfitting: train/val curves
+    stay close throughout.}
+\end{frame}
+
+
+% ============================================================
+\section{Results and Discussion}
+% ============================================================
+
+\begin{frame}{Results: Ours vs. Base Paper}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{l|c|c|c}
+            \hline
+            \textbf{Metric} & \textbf{Base Paper} & \textbf{Ours} & \textbf{Gap} \\ \hline
+            Dice        & 90.43  & 86.35 & $-4.08$ \\ \hline
+            mIoU        & 82.45  & 78.25 & $-4.20$ \\ \hline
+            Accuracy    & 95.86  & 94.17 & $-1.69$ \\ \hline
+            Specificity & 97.15  & \textbf{97.26} & $+0.11$ \\ \hline
+            Sensitivity & 91.14  & 86.73 & $-4.41$ \\ \hline
+        \end{tabular}
+        \caption{Skin lesion segmentation, ISIC2018 (all values in \%)}
+    \end{table}
+
+    \begin{itemize}
+        \item Specificity \textbf{matches (slightly exceeds)} the paper ---
+              background is correctly identified as well as, or better than,
+              the original.
+        \item Dice / mIoU / Sensitivity trail by $\sim\!4$--$4.5$ points ---
+              a consistent, explainable gap, not a broken replication.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Discussion: Explaining the Gap}
+    \begin{block}{Parameter Count}
+    Ours: $0.660$M vs. paper's claimed $0.026$M.
+    \begin{itemize}
+        \item The paper does \textbf{not} publish exact channel widths per
+              layer for the Local/Global Pathways or GCN node count.
+        \item Our reconstructed widths (kept intentionally small, 8--128
+              channels) are a reasonable but not byte-for-byte match.
+    \end{itemize}
+    \end{block}
+
+    \medskip
+
+    \begin{block}{Performance Gap}
+    \begin{itemize}
+        \item Data split differs from the paper's (Table above).
+        \item GCN node count ($N=32$) and skip-fusion details were
+              reconstructed, not published.
+        \item No official code exists to cross-check exact hyperparameters.
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Qualitative Results}
+    \begin{center}
+    % \includegraphics[width=0.9\textwidth]{imagens/qualitative}
+    \end{center}
+    {\footnotesize Left to right: input image, ground truth, prediction.
+    Predicted boundaries closely track ground truth on well-defined lesions;
+    occasional over-segmentation on diffuse/multi-cluster lesions.}
+\end{frame}
+
+
+% ============================================================
+\section{Conclusion}
+% ============================================================
+
+\begin{frame}{Conclusion}
+    \begin{itemize}
+        \item BVI-Net reimplemented successfully with the real Mamba
+              selective-scan backend; trains stably on full ISIC2018,
+              reaching \textbf{86.35 Dice}.
+
+        \medskip
+
+        \item Dice trails the paper by 4.08 points; specificity matches
+              almost exactly (97.26 vs.\ 97.15).
+
+        \medskip
+
+        \item Parameter count (0.660M) exceeds the claimed 0.026M ---
+              attributable to unpublished exact layer widths and GCN node
+              count, not a flaw in the core architecture.
+    \end{itemize}
+
+    \bigskip
+
+    \begin{block}{Key Takeaway}
+    The dual-pathway, bio-inspired design \textbf{is reproducible and
+    effective}; the ultra-lightweight parameter claim specifically is hard to
+    verify without the authors' exact configuration or released code.
+    \end{block}
+\end{frame}
+
+
+\begin{frame}{Future Work}
+    \begin{itemize}
+        \item Systematic width search to approach the claimed 0.026M
+              parameter budget while tracking the Dice trade-off.
+        \item Extend replication to \textbf{LiTS17} (liver) and
+              \textbf{BraTS19} (brain) tasks for full paper coverage.
+        \item Ablation study: isolate contribution of Gabor init, FA-VSSM,
+              and GCN-Attention skips individually.
+        \item Build a \textbf{frontend web app} to upload a skin image and
+              view the predicted lesion segmentation in real time.
+    \end{itemize}
+\end{frame}
+
+% ============================================================
+\section{References}
+% ============================================================
+
+\begin{frame}[allowframebreaks]{References}
+    \nocite{*}
+    \bibliography{referencias}
+\end{frame}
+
+\begin{frame}
+
+\begin{center}
+    \Huge Thank you!
+\end{center}
+
+\begin{figure}[htb]
+    \centering
+    % \includegraphics[width=0.5\textwidth]{imagens/logo}
+\end{figure}
+
+\end{frame}
+
+\end{document}

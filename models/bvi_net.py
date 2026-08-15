@@ -66,18 +66,19 @@ class BVINet(nn.Module):
     guaranteed byte-for-byte match.
     """
 
-    def __init__(self, in_channels=3, num_classes=1):
+    def __init__(self, in_channels=3, num_classes=1, channels=None, gcn_nodes=32):
         super().__init__()
-        chans = [in_channels] + CHANNELS
+        channels = channels if channels is not None else CHANNELS  # override to shrink/grow the model
+        chans = [in_channels] + channels
         self.encoders = nn.ModuleList([
-            EncoderStage(chans[i], chans[i + 1], STAGE_ROLES[i]) for i in range(len(CHANNELS))
+            EncoderStage(chans[i], chans[i + 1], STAGE_ROLES[i]) for i in range(len(channels))
         ])
 
         # Decode from the bottleneck back up through all 5 skip levels (reverse order).
-        rev = list(reversed(CHANNELS))  # [128, 64, 32, 16, 8]
-        decoder_out = rev[1:] + [rev[-1]]  # last stage keeps 8 channels for the head
+        rev = list(reversed(channels))
+        decoder_out = rev[1:] + [rev[-1]]  # last stage keeps the smallest width for the head
         self.decoders = nn.ModuleList([
-            DecoderStage(in_ch=rev[i], skip_ch=rev[i], out_ch=decoder_out[i])
+            DecoderStage(in_ch=rev[i], skip_ch=rev[i], out_ch=decoder_out[i], num_nodes=gcn_nodes)
             for i in range(len(rev))
         ])
         self.head = nn.Conv2d(decoder_out[-1], num_classes, kernel_size=1)

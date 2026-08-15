@@ -44,6 +44,10 @@ def main():
     ap.add_argument("--lr", type=float, default=0.001)
     ap.add_argument("--patience", type=int, default=15)  # 5 stopped training too early in testing
     ap.add_argument("--out_dir", default="checkpoints")
+    ap.add_argument("--channels", type=int, nargs=5, default=None,
+                     help="Override encoder channel widths, e.g. --channels 4 8 16 32 64 "
+                          "to shrink the model toward the paper's claimed 0.026M params")
+    ap.add_argument("--gcn_nodes", type=int, default=32)
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -54,7 +58,7 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
 
-    model = BVINet().to(device)
+    model = BVINet(channels=args.channels, gcn_nodes=args.gcn_nodes).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} ({n_params / 1e6:.4f}M)")
 
