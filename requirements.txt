@@ -1,5 +1,6 @@
-torch==2.3.0
-torchvision==0.18.0
+# torch/torchvision intentionally NOT pinned -- Colab/Kaggle ship a
+# preinstalled, GPU-matched build; pinning here would force a downgrade
+# that breaks the already-compiled mamba-ssm CUDA extension.
 numpy
 pillow
 opencv-python
