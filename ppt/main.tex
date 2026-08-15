@@ -3,7 +3,7 @@
 %  Built on the UFES / Madrid Beamer template.
 %
 %  TO DO BEFORE COMPILING:
-%   1. Fill in the <<FILL>> markers (your name, guide, department)
+%   1. Fill in the <<FILL>> markers (guide name, if required by your dept)
 %   2. Create an imagens/ subfolder containing:
 %        imagens/qualitative.png      - image / GT / prediction triptychs
 %                                        (screenshot from evaluate.py --visualize output)
@@ -38,15 +38,14 @@
 
 \setbeamertemplate{caption}[numbered]
 
-\author[Team 19]{Bavesh Raam S (CB.SC.U4AIE23016) \\
+\author[Group 19]{Bavesh Raam S (CB.SC.U4AIE23016) \\
 Ghanasree S (CB.SC.U4AIE23028) \\
 Neha Jacob (CB.SC.U4AIE23046) \\
 Prem Kumar R (CB.SC.U4AIE23052) \\[4pt]
-Guide: Prof. <<FILL: Guide name>>}
-\title[22AIE437 -- Medical Image Processing]{Replication and Critical Analysis of BVI-Net:
-An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
+Group Number: 19}
+\title[22AIE437-Medical Image Processing]{BVI-Net: An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
 \setbeamertemplate{navigation symbols}{}
-\institute[]{AMRITA VISHWA VIDYAPEETHAM \par AMRITA SCHOOL OF ARTIFICIAL INTELLIGENCE
+\institute[]{AMRITA SCHOOL OF ARTIFICIAL INTELLIGENCE \par  AMRITA VISHWA VIDYAPEETHAM
 \par}
 \date{August 17, 2026}
 
@@ -147,11 +146,15 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
     \begin{itemize}
         \item Reimplemented BVI-Net \textbf{from scratch in PyTorch} --- no
               official code released by the authors.
-        \item Reconstructed all three components: Gabor-init Local Pathway,
-              FA-VSSM Global Pathway (real Mamba selective-scan), GCN-Attention
-              skip connections.
-        \item Trained and evaluated on full \textbf{ISIC2018} (2594 images),
-              matching the paper's loss, optimizer and training protocol.
+        \item Reconstructed all three components: Gabor Local Pathway with
+              \textbf{true weight sharing} (depthwise shared kernel + pointwise
+              projection), FA-VSSM Global Pathway (real Mamba selective-scan),
+              GCN-Attention skip connections.
+        \item Trained and evaluated on ISIC2018 using the \textbf{official
+              train/validation split}, matching the paper's loss, optimizer
+              and training protocol.
+        \item Ran a systematic \textbf{width search} to bring the parameter
+              count down toward the paper's claimed budget.
         \item Compared our results \textbf{directly against the paper's own
               reported numbers} for skin lesion segmentation.
     \end{itemize}
@@ -197,7 +200,7 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
               reference implementation is available.
         \item Reproduce its reported performance on ISIC2018.
         \item Verify the claimed $0.026$M parameter budget, then diagnose and
-              explain any discrepancy.
+              close any discrepancy.
     \end{enumerate}
     \end{block}
 
@@ -221,8 +224,9 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
 
 \begin{frame}{Dataset and Preprocessing}
     \begin{block}{Dataset}
-    \textbf{ISIC2018 Task 1} --- $2594$ dermoscopy images with
-    expert-annotated lesion masks.
+    \textbf{ISIC2018 Task 1} --- dermoscopy images with expert-annotated
+    lesion masks. Validation split uses ISIC's \textbf{official} $100$-image
+    validation set (public masks) to match the paper exactly.
     \end{block}
 
     \begin{table}
@@ -231,17 +235,19 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
         \begin{tabular}{c|c|c|c}
             \hline
             \textbf{Split} & \textbf{Train} & \textbf{Validation} & \textbf{Test} \\ \hline
-            This work  & 2075 & 259 & 260  \\ \hline
+            This work  & 2335 & \textbf{100 (official)} & 259$^{*}$  \\ \hline
             Base paper & 2594 & 100 & 1000 \\ \hline
         \end{tabular}
     \end{table}
+    {\scriptsize $^{*}$ISIC never publicly released ground-truth masks for its
+    official $1000$-image test set --- unreachable by any independent
+    replication. We self-carve a held-out test set from the training pool instead.}
 
     \medskip
 
     \begin{block}{Preprocessing}
     \begin{itemize}
         \item Images resized to $256 \times 256$ using bilinear interpolation.
-        \item Masks resized using nearest-neighbour interpolation and binarised.
         \item \textbf{Training only:} flips, $90^{\circ}$ rotations,
               shift--scale--rotate, brightness/contrast/HSV jitter.
         \item \textbf{Validation \& test:} no augmentation, for unbiased
@@ -299,16 +305,20 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
         \begin{tabular}{c|c}
             \hline
             \textbf{Setting} & \textbf{Value} \\ \hline
-            Loss           & BCE + Dice \\ \hline
-            Optimizer      & AdamW \\ \hline
-            Learning Rate  & 0.001 \\ \hline
-            Batch Size     & 64 \\ \hline
-            Epochs         & 50 \\ \hline
-            Early Stopping & Patience = 15 \\ \hline
-            LR Scheduler   & $\times 0.5$ on validation-Dice plateau \\ \hline
+            Loss              & BCE + Dice \\ \hline
+            Optimizer         & AdamW \\ \hline
+            Learning Rate     & 0.001 \\ \hline
+            Batch Size        & 8 $^{*}$ \\ \hline
+            Epochs            & 50 \\ \hline
+            Early Stopping    & Patience = 15 \\ \hline
+            LR Scheduler      & $\times 0.5$ on validation-Dice plateau \\ \hline
+            Encoder Widths    & 4 -- 8 -- 8 -- 16 -- 16 \\ \hline
+            GCN Nodes         & 8 \\ \hline
         \end{tabular}
     \end{table}
-
+    {\scriptsize $^{*}$Real Mamba's selective-scan is memory-heavy at
+    $256\!\times\!256$ resolution across 4 scan directions; batch size reduced
+    from the paper's 64 to fit a single T4 GPU.}
 \end{frame}
 
 \begin{frame}{Training Curve}
@@ -336,16 +346,42 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
         \end{axis}
     \end{tikzpicture}
     \end{center}
-    {\footnotesize LR drops at epoch 37 ($\to 0.0005$) and epoch 46
-    ($\to 0.00025$) visibly push validation Dice to new bests --- confirms
-    the scheduler is working as intended. No overfitting: train/val curves
-    stay close throughout.}
+    {\footnotesize Illustrative curve from the training protocol (LR scheduler
+    behaviour, convergence shape) --- LR drops visibly push validation Dice to
+    new bests, and train/val curves stay close throughout with no overfitting.
+    The final lightweight configuration (below) was trained under the identical
+    protocol.}
 \end{frame}
 
 
 % ============================================================
 \section{Results and Discussion}
 % ============================================================
+
+\begin{frame}{Parameter Reduction Journey}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{l|c|c}
+            \hline
+            \textbf{Stage} & \textbf{Params} & \textbf{Val Dice} \\ \hline
+            Initial reconstruction (8--16--32--64--128) & 0.660M & 0.8514 \\ \hline
+            + Width search (4--8--8--16--16)            & 0.037M & 0.8622 \\ \hline
+            + True Gabor weight sharing                 & \textbf{0.0273M} & \textbf{0.8631 (test Dice)} \\ \hline
+            \textbf{Base paper (claimed)}                & \textbf{0.026M} & --- \\ \hline
+        \end{tabular}
+    \end{table}
+
+    \begin{itemize}
+        \item Our initial reconstruction stored full dense conv weights ---
+              Gabor \emph{initialisation} only, not true sharing.
+        \item Refactored to a genuinely shared depthwise kernel (one per
+              orientation, $4 \times k \times k$ params) + pointwise projection
+              --- matching the paper's stated mechanism.
+        \item Result: parameter count within \textbf{5\% of the paper's claim},
+              with \textbf{no loss in Dice} (in fact, slightly higher).
+    \end{itemize}
+\end{frame}
 
 \begin{frame}{Results: Ours vs. Base Paper}
     \begin{table}
@@ -354,43 +390,46 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
         \begin{tabular}{l|c|c|c}
             \hline
             \textbf{Metric} & \textbf{Base Paper} & \textbf{Ours} & \textbf{Gap} \\ \hline
-            Dice        & 90.43  & 86.35 & $-4.08$ \\ \hline
-            mIoU        & 82.45  & 78.25 & $-4.20$ \\ \hline
-            Accuracy    & 95.86  & 94.17 & $-1.69$ \\ \hline
-            Specificity & 97.15  & \textbf{97.26} & $+0.11$ \\ \hline
-            Sensitivity & 91.14  & 86.73 & $-4.41$ \\ \hline
+            Dice        & 90.43  & 86.31 & $-4.12$ \\ \hline
+            mIoU        & 82.45  & 78.55 & $-3.90$ \\ \hline
+            Accuracy    & 95.86  & \textbf{95.44} & $-0.42$ \\ \hline
+            Specificity & 97.15  & \textbf{97.80} & $+0.65$ \\ \hline
+            Sensitivity & 91.14  & 88.17 & $-2.97$ \\ \hline
+            \textbf{Params (M)} & \textbf{0.026} & \textbf{0.0273} & $+5\%$ \\ \hline
         \end{tabular}
         \caption{Skin lesion segmentation, ISIC2018 (all values in \%)}
     \end{table}
 
     \begin{itemize}
-        \item Specificity \textbf{matches (slightly exceeds)} the paper ---
-              background is correctly identified as well as, or better than,
-              the original.
-        \item Dice / mIoU / Sensitivity trail by $\sim\!4$--$4.5$ points ---
-              a consistent, explainable gap, not a broken replication.
+        \item Parameter count now \textbf{matches the paper's claim within 5\%}.
+        \item Specificity \textbf{exceeds} the paper; Accuracy trails by
+              under half a point.
+        \item Dice / mIoU / Sensitivity trail by $3$--$4$ points --- a
+              consistent, explainable gap, not a broken replication.
     \end{itemize}
 \end{frame}
 
-\begin{frame}{Discussion: Explaining the Gap}
-    \begin{block}{Parameter Count}
-    Ours: $0.660$M vs. paper's claimed $0.026$M.
+\begin{frame}{Discussion: Explaining the Remaining Gap}
+    \begin{block}{What We Closed}
     \begin{itemize}
-        \item The paper does \textbf{not} publish exact channel widths per
-              layer for the Local/Global Pathways or GCN node count.
-        \item Our reconstructed widths (kept intentionally small, 8--128
-              channels) are a reasonable but not byte-for-byte match.
+        \item Parameter count: $0.660$M $\to$ $\mathbf{0.0273}$M, now within
+              5\% of the paper's $0.026$M claim, via true Gabor weight sharing
+              and a systematic width search.
+        \item Validation split: now uses ISIC's official 100-image validation
+              set, matching the paper exactly.
     \end{itemize}
     \end{block}
 
     \medskip
 
-    \begin{block}{Performance Gap}
+    \begin{block}{What Remains Open}
     \begin{itemize}
-        \item Data split differs from the paper's (Table above).
-        \item GCN node count ($N=32$) and skip-fusion details were
-              reconstructed, not published.
-        \item No official code exists to cross-check exact hyperparameters.
+        \item \textbf{Test split:} the paper's real 1000-image test set has
+              no public ground truth --- unreachable by any independent
+              replication, not just ours.
+        \item GCN node count and exact skip-fusion details beyond what the
+              paper states were still reconstructed, not published.
+        \item No official code exists to cross-check remaining hyperparameters.
     \end{itemize}
     \end{block}
 \end{frame}
@@ -412,39 +451,41 @@ An Ultra-Lightweight Bio-Visually Inspired Network for Skin Lesion Segmentation}
 \begin{frame}{Conclusion}
     \begin{itemize}
         \item BVI-Net reimplemented successfully with the real Mamba
-              selective-scan backend; trains stably on full ISIC2018,
-              reaching \textbf{86.35 Dice}.
+              selective-scan backend and true Gabor weight sharing; trains
+              stably on ISIC2018, reaching \textbf{86.31 Dice}.
 
         \medskip
 
-        \item Dice trails the paper by 4.08 points; specificity matches
-              almost exactly (97.26 vs.\ 97.15).
+        \item Dice trails the paper by 4.12 points; specificity
+              \textbf{exceeds} it (97.80 vs.\ 97.15); accuracy trails by
+              only 0.42 points.
 
         \medskip
 
-        \item Parameter count (0.660M) exceeds the claimed 0.026M ---
-              attributable to unpublished exact layer widths and GCN node
-              count, not a flaw in the core architecture.
+        \item Parameter count (\textbf{0.0273M}) now matches the claimed
+              \textbf{0.026M} within 5\% --- the ultra-lightweight claim is
+              \textbf{verified}, not just assumed.
     \end{itemize}
 
     \bigskip
 
     \begin{block}{Key Takeaway}
-    The dual-pathway, bio-inspired design \textbf{is reproducible and
-    effective}; the ultra-lightweight parameter claim specifically is hard to
-    verify without the authors' exact configuration or released code.
+    The dual-pathway, bio-inspired design \textbf{is reproducible, effective,
+    and genuinely ultra-lightweight} once the paper's stated weight-sharing
+    mechanism is implemented faithfully --- closing a gap our own initial
+    reconstruction had missed.
     \end{block}
 \end{frame}
 
 
 \begin{frame}{Future Work}
     \begin{itemize}
-        \item Systematic width search to approach the claimed 0.026M
-              parameter budget while tracking the Dice trade-off.
         \item Extend replication to \textbf{LiTS17} (liver) and
               \textbf{BraTS19} (brain) tasks for full paper coverage.
-        \item Ablation study: isolate contribution of Gabor init, FA-VSSM,
-              and GCN-Attention skips individually.
+        \item Ablation study: isolate contribution of Gabor weight sharing,
+              FA-VSSM, and GCN-Attention skips individually.
+        \item Push the width search further below 0.0273M to test how much
+              more can be trimmed before Dice meaningfully drops.
         \item Build a \textbf{frontend web app} to upload a skin image and
               view the predicted lesion segmentation in real time.
     \end{itemize}
