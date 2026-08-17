@@ -20,6 +20,9 @@ from transforms import get_train_augment
 
 # Each entry: (name, channels list, gcn_nodes). Smaller widths as we go down.
 # Every channel count must be divisible by 4 (one per Gabor orientation: 0/45/90/135deg).
+# These are the exact hyperparameter combinations swept by this script:
+#   channels  -- the 5 encoder-stage widths (see models/bvi_net.py BVINet.__init__)
+#   gcn_nodes -- graph node count N for every GCN-Attention skip (see models/gcn_attention.py)
 CONFIGS = [
     ("current (8-16-32-64-128, N=32)", [8, 16, 32, 64, 128], 32),
     ("narrow-1 (4-8-16-32-64, N=16)", [4, 8, 16, 32, 64], 16),
@@ -28,6 +31,21 @@ CONFIGS = [
 
 
 def run_epoch(model, loader, criterion, optimizer, device, train=True):
+    """Runs one full pass over a DataLoader, either training or evaluating.
+    (Identical logic to train.py's run_epoch, duplicated here so this script
+    stays a standalone, self-contained sweep tool.)
+
+    Parameters:
+        model (nn.Module): the BVINet instance being trained/evaluated.
+        loader (DataLoader): yields (image, mask) batches.
+        criterion (nn.Module): loss function (BCEDiceLoss).
+        optimizer (torch.optim.Optimizer): only stepped when train=True.
+        device (torch.device): "cuda" or "cpu".
+        train (bool, default=True): train mode (backprop) vs eval mode.
+
+    Returns:
+        tuple[float, float]: (mean_loss, mean_dice) over the loader.
+    """
     model.train(train)
     total_loss, total_dice, n = 0.0, 0.0, 0
     torch.set_grad_enabled(train)
@@ -46,6 +64,21 @@ def run_epoch(model, loader, criterion, optimizer, device, train=True):
 
 
 def main():
+    """Parses hyperparameters, then trains every config in CONFIGS for a
+    reduced number of epochs, printing/saving a params-vs-Dice summary.
+
+    Command-line hyperparameters:
+        --data_dir (str, default="data/isic2018a"): path to the prepared dataset.
+        --epochs (int, default=20): epochs per config -- deliberately less
+            than train.py's full 50, since this is a fast comparative sweep,
+            not a final training run.
+        --batch_size (int, default=64): samples per gradient step (in
+            practice reduced to 8 on the command line for real-Mamba memory
+            reasons, same as train.py).
+        --lr (float, default=0.001): AdamW learning rate, same as train.py.
+        --out_json (str, default="width_search_results.json"): where the
+            summary table (config, params, best Dice) is saved as JSON.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", default="data/isic2018a")
     ap.add_argument("--epochs", type=int, default=20,

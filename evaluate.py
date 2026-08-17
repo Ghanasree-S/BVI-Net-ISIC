@@ -16,9 +16,18 @@ from models import BVINet
 
 
 def save_triptych(img, mask, pred, out_path):
+    """Saves a side-by-side [input | ground truth | prediction] image for
+    qualitative inspection.
+
+    Parameters:
+        img (torch.Tensor): input image, shape (3, H, W), values in [0, 1].
+        mask (torch.Tensor): ground-truth mask, shape (1, H, W).
+        pred (torch.Tensor): predicted probabilities, shape (1, H, W).
+        out_path (str or Path): file path to write the combined PNG to.
+    """
     img_np = (img.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
     mask_np = (mask.squeeze().cpu().numpy() * 255).astype(np.uint8)
-    pred_np = ((pred.squeeze().cpu().numpy() > 0.5) * 255).astype(np.uint8)
+    pred_np = ((pred.squeeze().cpu().numpy() > 0.5) * 255).astype(np.uint8)  # 0.5 = decision threshold
 
     mask_rgb = cv2.cvtColor(mask_np, cv2.COLOR_GRAY2BGR)
     pred_rgb = cv2.cvtColor(pred_np, cv2.COLOR_GRAY2BGR)
@@ -28,6 +37,23 @@ def save_triptych(img, mask, pred, out_path):
 
 
 def main():
+    """Parses command-line arguments, loads a trained checkpoint, and runs
+    it over the test split to report Table-V-style metrics.
+
+    Command-line hyperparameters/parameters:
+        --checkpoint (str, default="checkpoints/best.pt"): path to the
+            trained model weights (output of train.py).
+        --data_dir (str, default="data/isic2018a"): path to the prepared
+            dataset.
+        --visualize (flag): if set, saves the first 12 test-set predictions
+            as image/GT/prediction triptychs to --out_dir.
+        --out_dir (str, default="outputs"): where triptych images are saved.
+        --channels (list[int] of 5, default=None): encoder channel widths --
+            MUST exactly match what the checkpoint was trained with, since
+            it determines the number of weight tensors and their shapes.
+        --gcn_nodes (int, default=32): GCN-Attention node count -- MUST
+            match the checkpoint's training configuration for the same reason.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkpoint", default="checkpoints/best.pt")
     ap.add_argument("--data_dir", default="data/isic2018a")

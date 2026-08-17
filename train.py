@@ -17,6 +17,21 @@ from transforms import get_train_augment
 
 
 def run_epoch(model, loader, criterion, optimizer, device, train=True):
+    """Runs one full pass over a DataLoader, either training or evaluating.
+
+    Parameters:
+        model (nn.Module): the BVINet instance being trained/evaluated.
+        loader (DataLoader): yields (image, mask) batches.
+        criterion (nn.Module): loss function (BCEDiceLoss).
+        optimizer (torch.optim.Optimizer): only stepped when train=True.
+        device (torch.device): "cuda" or "cpu".
+        train (bool, default=True): if True, runs backprop + optimizer step
+            and puts the model in train() mode (enables dropout/BN update);
+            if False, runs in eval() mode with gradients disabled.
+
+    Returns:
+        tuple[float, float]: (mean_loss, mean_dice) over every sample in the loader.
+    """
     model.train(train)
     total_loss, total_dice, n = 0.0, 0.0, 0
     torch.set_grad_enabled(train)
@@ -37,6 +52,31 @@ def run_epoch(model, loader, criterion, optimizer, device, train=True):
 
 
 def main():
+    """Parses hyperparameters from the command line, builds the model/data
+    pipeline, and runs the full training loop with early stopping.
+
+    Command-line hyperparameters:
+        --data_dir (str, default="data/isic2018a"): path to the prepared
+            dataset (output of data/prepare_isic_a.py).
+        --epochs (int, default=50): maximum training epochs -- matches the
+            paper's protocol; early stopping may end training sooner.
+        --batch_size (int, default=64): samples per gradient step. Paper
+            uses 64; reduced to 8 in practice when using real Mamba, since
+            its selective-scan at 256x256 is memory-heavy (see README).
+        --lr (float, default=0.001): initial AdamW learning rate, matches
+            the paper's stated value.
+        --patience (int, default=15): epochs to wait for a val_dice
+            improvement before early-stopping. The paper's own patience (5)
+            was found to stop too early in practice.
+        --out_dir (str, default="checkpoints"): where the best checkpoint
+            (best.pt) is saved.
+        --channels (list[int] of 5, default=None): overrides the encoder's
+            5-stage channel widths (see models/bvi_net.py BVINet.__init__)
+            -- the main lever for shrinking total parameter count.
+        --gcn_nodes (int, default=32): overrides the GCN-Attention graph
+            node count N used at every skip connection (see
+            models/gcn_attention.py) -- second lever on parameter count.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_dir", default="data/isic2018a")
     ap.add_argument("--epochs", type=int, default=50)
@@ -62,7 +102,7 @@ def main():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} ({n_params / 1e6:.4f}M)")
 
-    criterion = BCEDiceLoss()
+    criterion = BCEDiceLoss()  # lambda1 = lambda2 = 1.0 (Eq. 9 of the paper)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="max", factor=0.5, patience=3

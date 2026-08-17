@@ -1,9 +1,10 @@
 """Global Pathway: Fast-Attention Visual State Space Module (FA-VSSM).
 
-Tries to use the real Mamba selective-scan (mamba_ssm) for the state-space channel.
-If that package is not installed/buildable (common on Colab), falls back to a
-depthwise-conv + gated-linear-unit approximation of a selective SSM. This is a
-documented deviation for feasibility, not a silent substitution -- see README.
+Tries to use the real Mamba selective-scan (mamba_ssm) for the state-space
+channel. If that package is not installed/buildable (common on Colab), falls
+back to a depthwise-conv + gated-linear-unit approximation of a selective
+SSM. This is a documented deviation for feasibility, not a silent
+substitution -- see README.
 """
 import torch
 import torch.nn as nn
@@ -17,7 +18,22 @@ except Exception:
 
 
 def _scan_order(h, w, mode):
-    """Return a permutation of flattened pixel indices for the given scan mode."""
+    """Computes a pixel visiting order used to flatten a 2D feature map into
+    a 1D sequence for the state-space model.
+
+    Parameters (hyperparameters):
+        h (int): feature map height.
+        w (int): feature map width.
+        mode (str): one of "line", "column", "zcurve", "hilbert" -- selects
+            which of the paper's four scan directions to use. Different
+            orders change which neighbouring pixels are adjacent in the
+            resulting sequence, giving the SSM different notions of
+            "nearby" context.
+
+    Returns:
+        torch.LongTensor of shape (h*w,): a permutation of flattened pixel
+        indices defining the scan order.
+    """
     idx = torch.arange(h * w).view(h, w)
     if mode == "line":
         return idx.flatten()
@@ -39,6 +55,16 @@ def _scan_order(h, w, mode):
 
 
 def _hilbert_order(h, w):
+    """Computes a Hilbert-curve pixel visiting order (one of the 4 scan modes).
+
+    Parameters:
+        h (int): feature map height.
+        w (int): feature map width.
+
+    Returns:
+        torch.LongTensor: flattened pixel indices in Hilbert-curve order,
+        clipped to the (h, w) grid.
+    """
     n = max(h, w)
     n = 1 << (n - 1).bit_length()
 
@@ -71,12 +97,32 @@ class SimpleSSMBranch(nn.Module):
     """
 
     def __init__(self, dim, kernel_size=7):
+        """Builds the fallback depthwise-conv + gating approximation of a selective SSM.
+
+        Hyperparameters:
+            dim (int): feature channel width at this encoder stage -- both
+                input and output width of this branch.
+            kernel_size (int, default=7): temporal/spatial receptive field of
+                the depthwise causal convolution along the scanned sequence.
+                Larger values let the approximation "see" further along the
+                scan order, at the cost of a few more parameters
+                (dim * kernel_size).
+        """
         super().__init__()
         self.dw = nn.Conv1d(dim, dim, kernel_size, padding=kernel_size - 1, groups=dim)
         self.gate = nn.Linear(dim, dim)
         self.out = nn.Linear(dim, dim)
 
-    def forward(self, seq):  # seq: (B, L, C)
+    def forward(self, seq):
+        """Applies depthwise causal conv, then gates it with a sigmoid-linear unit.
+
+        Parameters:
+            seq (torch.Tensor): scanned sequence, shape (B, L, C) where L is
+                the flattened pixel count (H*W) and C == dim.
+
+        Returns:
+            torch.Tensor of shape (B, L, C): sequence-processed features.
+        """
         x = seq.transpose(1, 2)  # (B, C, L)
         x = self.dw(x)[..., : seq.size(1)]
         x = x.transpose(1, 2)  # (B, L, C)
@@ -92,6 +138,20 @@ class StateSpaceChannel(nn.Module):
     MODES = ("line", "column", "zcurve", "hilbert")
 
     def __init__(self, dim):
+        """Builds the SSM backend (real Mamba if available, else the fallback)
+        and a cache for scan-order permutations.
+
+        Hyperparameters:
+            dim (int): feature channel width at this encoder stage, passed
+                through to the SSM backend.
+                - If real Mamba is used: internally sets d_model=dim,
+                  d_state=16 (size of the hidden state per channel -- controls
+                  how much history the selective scan can retain), d_conv=4
+                  (local conv kernel inside Mamba, short-range smoothing),
+                  expand=2 (internal channel expansion factor, trades a bit
+                  more compute for expressiveness).
+                - If fallback: passed to SimpleSSMBranch (see above).
+        """
         super().__init__()
         if HAS_MAMBA:
             self.ssm = Mamba(d_model=dim, d_state=16, d_conv=4, expand=2)
@@ -100,12 +160,34 @@ class StateSpaceChannel(nn.Module):
         self._order_cache = {}
 
     def _get_order(self, h, w, mode, device):
+        """Looks up (or computes and caches) the scan-order permutation for a
+        given feature map size and scan mode, avoiding recomputation every
+        forward pass.
+
+        Parameters:
+            h (int): feature map height.
+            w (int): feature map width.
+            mode (str): scan mode, one of StateSpaceChannel.MODES.
+            device (torch.device): device to place the cached order tensor on.
+
+        Returns:
+            torch.LongTensor: the cached (or freshly computed) scan order.
+        """
         key = (h, w, mode)
         if key not in self._order_cache:
             self._order_cache[key] = _scan_order(h, w, mode).to(device)
         return self._order_cache[key]
 
-    def forward(self, x):  # x: (B, C, H, W)
+    def forward(self, x):
+        """Runs the SSM along all 4 scan directions and averages the results.
+
+        Parameters:
+            x (torch.Tensor): input feature map, shape (B, C, H, W).
+
+        Returns:
+            torch.Tensor of shape (B, C, H, W): globally-contextualized
+            features, averaged across the 4 scan-direction outputs.
+        """
         b, c, h, w = x.shape
         flat = x.flatten(2).transpose(1, 2)  # (B, HW, C)
         outs = []
@@ -124,10 +206,27 @@ class FastAttentionChannel(nn.Module):
     """Eq. (5): adaptive channel attention from avg+max pooled features."""
 
     def __init__(self, dim):
+        """Builds the pooling-based attention gate.
+
+        Hyperparameters:
+            dim (int): input feature channel width (used only to validate
+                shapes; the attention itself operates on pooled 1-channel
+                maps, so no dim-dependent parameters are created here beyond
+                the fixed 7x7 conv below).
+        """
         super().__init__()
         self.conv = nn.Conv2d(2, 1, kernel_size=7, padding=3)
 
     def forward(self, x):
+        """Computes a single-channel spatial attention map from avg+max pooling.
+
+        Parameters:
+            x (torch.Tensor): input feature map, shape (B, C, H, W).
+
+        Returns:
+            torch.Tensor of shape (B, 1, H, W): attention weights in [0, 1],
+            broadcastable back over all C channels.
+        """
         avg = x.mean(dim=1, keepdim=True)
         mx = x.amax(dim=1, keepdim=True)
         attn = torch.sigmoid(self.conv(torch.cat([avg, mx], dim=1)))
@@ -138,12 +237,30 @@ class FAVSSM(nn.Module):
     """Full Global Pathway block: fast-attention channel gates the state-space channel."""
 
     def __init__(self, dim):
+        """Builds the fast-attention channel, the state-space channel, and a
+        BatchNorm for the fused output.
+
+        Hyperparameters:
+            dim (int): feature channel width at this encoder stage. Passed to
+                both FastAttentionChannel and StateSpaceChannel, and used to
+                size the residual BatchNorm2d.
+        """
         super().__init__()
         self.fast_attn = FastAttentionChannel(dim)
         self.ssm_channel = StateSpaceChannel(dim)
         self.norm = nn.BatchNorm2d(dim)
 
     def forward(self, x):
+        """Gates the SSM output with the pooling-attention map and adds a
+        residual connection, then normalizes.
+
+        Parameters:
+            x (torch.Tensor): input feature map, shape (B, dim, H, W).
+
+        Returns:
+            torch.Tensor of shape (B, dim, H, W): global-context features
+            for this encoder stage (the "Global Pathway" output).
+        """
         attn = self.fast_attn(x)
         ssm_out = self.ssm_channel(x)
         return self.norm(x + attn * ssm_out)

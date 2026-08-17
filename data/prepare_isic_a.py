@@ -20,10 +20,27 @@ from tqdm import tqdm
 
 IMG_SUFFIX = ".jpg"
 MASK_SUFFIX = "_segmentation.png"
-SIZE = 256
+SIZE = 256  # target resolution, matches the paper's stated input size
 
 
 def find_dirs(raw_dir, img_pattern, mask_pattern, required=True):
+    """Locates the images/masks subfolders inside a raw dataset directory,
+    searching recursively so this works regardless of how deeply Kaggle/ISIC
+    nests the actual files.
+
+    Parameters:
+        raw_dir (str or Path): root folder to search under.
+        img_pattern (str): glob pattern identifying the images folder, e.g.
+            "*Training_Input*".
+        mask_pattern (str): glob pattern identifying the masks folder, e.g.
+            "*Training_GroundTruth*".
+        required (bool, default=True): if True, raises an error (with a
+            directory-tree dump for debugging) when the patterns aren't
+            found; if False, returns (None, None) instead.
+
+    Returns:
+        tuple[Path, Path]: (images_dir, masks_dir).
+    """
     raw = Path(raw_dir)
     try:
         img_dir = next(raw.rglob(img_pattern))
@@ -42,6 +59,22 @@ def find_dirs(raw_dir, img_pattern, mask_pattern, required=True):
 
 
 def save_pair(img_path, mask_dir, out_dir, split):
+    """Loads one image + its matching mask, resizes both, and writes them
+    into the prepared dataset's split folder.
+
+    Parameters:
+        img_path (Path): source image file path.
+        mask_dir (Path): folder containing the matching mask file (matched
+            by filename stem + MASK_SUFFIX).
+        out_dir (Path): root of the prepared dataset (contains
+            train/val/test subfolders).
+        split (str): which split folder to write into ("train", "val", or
+            "test").
+
+    Returns:
+        bool: True if the pair was found and saved, False if no matching
+        mask existed (the image is skipped in that case).
+    """
     stem = img_path.stem
     mask_path = mask_dir / f"{stem}{MASK_SUFFIX}"
     if not mask_path.exists():
@@ -49,8 +82,8 @@ def save_pair(img_path, mask_dir, out_dir, split):
 
     img = cv2.imread(str(img_path))
     mask = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
-    img = cv2.resize(img, (SIZE, SIZE), interpolation=cv2.INTER_LINEAR)
-    mask = cv2.resize(mask, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)
+    img = cv2.resize(img, (SIZE, SIZE), interpolation=cv2.INTER_LINEAR)      # smooth resize for RGB
+    mask = cv2.resize(mask, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST)   # nearest-neighbour keeps mask binary
 
     cv2.imwrite(str(out_dir / split / "images" / f"{stem}.png"), img)
     cv2.imwrite(str(out_dir / split / "masks" / f"{stem}.png"), mask)
@@ -58,6 +91,32 @@ def save_pair(img_path, mask_dir, out_dir, split):
 
 
 def main():
+    """Parses hyperparameters and builds the resized train/val/test dataset
+    folders used by dataset.py.
+
+    Command-line hyperparameters/parameters:
+        --raw_dir (str): path to the raw ISIC2018 training set (images +
+            ground truth), e.g. the Kaggle-mounted dataset folder.
+        --val_raw_dir (str, default=None): path to the official ISIC2018
+            validation set (see data/download_isic_official_val.sh). If
+            given, the val split matches the paper's 100-image official set
+            exactly; if omitted, val is instead self-split from the training
+            pool (see --splits).
+        --out_dir (str, default="data/isic2018a"): where the prepared,
+            resized dataset is written.
+        --fraction (float, default=1.0): fraction of the training pool to
+            use. 1.0 = full ISIC2018 (2594 images); 0.25 reproduces the
+            paper's own "ISIC2018-a" ablation subset.
+        --seed (int, default=42): random seed for shuffling/sampling, so the
+            split is reproducible across runs.
+        --test_fraction (float, default=0.1): fraction of the training pool
+            held out as our own test set -- only used when --val_raw_dir is
+            given, since the paper's real 1000-image test set has no public
+            masks and cannot be reproduced.
+        --splits (tuple[float, float, float], default=(0.8, 0.1, 0.1)):
+            train/val/test fractions -- only used in the self-split fallback
+            mode (when --val_raw_dir is not given).
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw_dir", default=str(Path(__file__).parent / "isic2018_raw"))
     ap.add_argument("--val_raw_dir", default=None,
