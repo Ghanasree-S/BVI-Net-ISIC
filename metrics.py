@@ -172,3 +172,34 @@ def all_metrics(pred, target):
         "sensitivity": sensitivity(pred, target),
         "assd": assd(pred, target),
     }
+
+
+def per_class_metrics(pred, target, class_names):
+    """Breaks down every metric per output channel, for multi-label models
+    (LiTS17's Liver/Tumor, BraTS19's WT/TC/ET) where channels overlap and
+    are each scored independently -- matches paper Tables VI/VII, which
+    report a separate row per class rather than one pooled score.
+
+    Parameters:
+        pred (torch.Tensor): predicted probabilities, shape
+            (B, num_classes, H, W) or (num_classes, H, W).
+        target (torch.Tensor): ground-truth binary mask, same shape as pred.
+        class_names (list[str]): name for each channel, e.g.
+            ["liver", "tumor"] or ["WT", "TC", "ET"] -- length must equal
+            pred.shape[-3] (the channel dim).
+
+    Returns:
+        dict[str, dict[str, float]]: outer key is the class name, inner
+        dict is the same per-class output as all_metrics() for that
+        channel alone.
+    """
+    if pred.dim() == 3:
+        pred, target = pred.unsqueeze(0), target.unsqueeze(0)
+    num_classes = pred.shape[1]
+    if num_classes != len(class_names):
+        raise ValueError(f"pred has {num_classes} channels but got {len(class_names)} class_names")
+
+    return {
+        name: all_metrics(pred[:, c], target[:, c])
+        for c, name in enumerate(class_names)
+    }

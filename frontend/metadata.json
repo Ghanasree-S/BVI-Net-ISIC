@@ -1,0 +1,6 @@
+{
+  "name": "BVI-Net Medical Lesion Segmentation",
+  "description": "Ultra-lightweight deep learning medical AI dashboard for multi-organ lesion segmentation and real-time mask overlay analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

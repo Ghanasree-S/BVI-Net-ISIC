@@ -1,0 +1,1216 @@
+<title>How BVI-Net Works</title>
+
+<style>
+/* ============================================================
+   Design tokens — light is the base, dark redefines tokens only.
+   Never declare a colour outside :root / the two dark scopes.
+   ============================================================ */
+:root{
+  color-scheme: light;
+  --ground:#EFF2F4;
+  --surface:#FFFFFF;
+  --surface-2:#F6F9FA;
+  --surface-3:#E4EBEF;
+  --ink:#121A21;
+  --ink-2:#4B5A64;
+  --ink-3:#7B8B93;
+  --rule:#D6DEE3;
+  --rule-2:#C0CCD3;
+
+  --local:#EB6834;        /* ventral / local pathway — marks */
+  --local-ink:#A8410F;    /* ventral — text */
+  --local-wash:#FCEFE9;
+
+  --global:#2A78D6;       /* dorsal / global pathway — marks */
+  --global-ink:#1B5AA8;   /* dorsal — text */
+  --global-wash:#E9F1FC;
+
+  --good:#0F7A44;
+  --good-wash:#E6F3EC;
+  --warn-ink:#8A5A08;
+  --warn-wash:#FBF1DE;
+
+  --plate:#171C21;        /* fixed dark plate for receptive-field figures */
+  --plate-ink:#C7D0D6;
+
+  --f-head: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Iowan Old Style", Charter, "Palatino Linotype", "Book Antiqua", Palatino, Georgia, ui-serif, serif;
+  --f-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", Consolas, monospace;
+
+  --frame:1140px;
+  --measure:640px;
+  --rail:172px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#0D1114;
+    --surface:#151B20;
+    --surface-2:#1B2229;
+    --surface-3:#222B32;
+    --ink:#E9EFF2;
+    --ink-2:#9CACB5;
+    --ink-3:#6E7E87;
+    --rule:#232D34;
+    --rule-2:#33404A;
+
+    --local:#D95926;
+    --local-ink:#F19468;
+    --local-wash:#2A1811;
+
+    --global:#3987E5;
+    --global-ink:#82B5F3;
+    --global-wash:#101E2E;
+
+    --good:#35A86A;
+    --good-wash:#0F241A;
+    --warn-ink:#D9A94E;
+    --warn-wash:#241C0D;
+
+    --plate:#0A0D10;
+    --plate-ink:#C7D0D6;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0D1114;
+  --surface:#151B20;
+  --surface-2:#1B2229;
+  --surface-3:#222B32;
+  --ink:#E9EFF2;
+  --ink-2:#9CACB5;
+  --ink-3:#6E7E87;
+  --rule:#232D34;
+  --rule-2:#33404A;
+
+  --local:#D95926;
+  --local-ink:#F19468;
+  --local-wash:#2A1811;
+
+  --global:#3987E5;
+  --global-ink:#82B5F3;
+  --global-wash:#101E2E;
+
+  --good:#35A86A;
+  --good-wash:#0F241A;
+  --warn-ink:#D9A94E;
+  --warn-wash:#241C0D;
+
+  --plate:#0A0D10;
+  --plate-ink:#C7D0D6;
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-size:18px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--global-wash);}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:50;
+  background:var(--surface);
+  border-bottom:1px solid var(--rule);
+  font-family:var(--f-head);
+}
+.topbar-in{
+  max-width:var(--frame); margin:0 auto; padding:0 24px;
+  height:52px; display:flex; align-items:center; gap:20px;
+}
+.tb-mark{
+  display:flex; align-items:center; gap:9px;
+  font-size:13px; font-weight:650; letter-spacing:.02em;
+  color:var(--ink); white-space:nowrap;
+}
+.tb-dots{display:flex; gap:3px;}
+.tb-dots i{width:7px; height:7px; border-radius:50%; display:block;}
+.tb-dots i:first-child{background:var(--global);}
+.tb-dots i:last-child{background:var(--local);}
+.tb-nav{
+  display:flex; gap:2px; margin-left:auto;
+  overflow-x:auto; scrollbar-width:none;
+}
+.tb-nav::-webkit-scrollbar{display:none;}
+.tb-nav a{
+  font-size:12.5px; color:var(--ink-2); text-decoration:none;
+  padding:5px 9px; border-radius:5px; white-space:nowrap;
+}
+.tb-nav a:hover{background:var(--surface-2); color:var(--ink);}
+.tb-companion{
+  font-family:var(--f-head); font-size:12.5px; font-weight:600;
+  color:var(--surface); background:var(--ink);
+  text-decoration:none; padding:6px 12px; border-radius:6px;
+  white-space:nowrap;
+}
+.tb-companion:hover{opacity:.85;}
+@media (max-width:820px){ .tb-nav{display:none;} }
+
+/* ---------- page frame + rail ---------- */
+.frame{max-width:var(--frame); margin:0 auto; padding:0 24px;}
+.col{max-width:var(--measure);}
+@media (min-width:1080px){
+  .railed{display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:44px;}
+  .railed > .col{max-width:var(--measure);}
+}
+
+/* ---------- hero ---------- */
+.hero{padding:64px 0 44px; border-bottom:1px solid var(--rule);}
+.eyebrow{
+  font-family:var(--f-head); font-size:11.5px; font-weight:680;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3);
+  margin:0 0 18px;
+}
+h1{
+  font-family:var(--f-head);
+  font-size:clamp(36px,5.4vw,54px); line-height:1.04;
+  letter-spacing:-.028em; font-weight:700;
+  margin:0 0 20px; text-wrap:balance;
+}
+.standfirst{
+  font-size:21px; line-height:1.52; color:var(--ink-2);
+  max-width:640px; margin:0 0 30px;
+}
+.standfirst strong{color:var(--ink); font-weight:600;}
+
+.cite{
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:9px; padding:18px 20px; max-width:640px;
+  font-size:15px; line-height:1.5;
+}
+.cite .t{font-weight:600; color:var(--ink); display:block; margin-bottom:5px;}
+.cite .m{font-family:var(--f-head); font-size:13px; color:var(--ink-2);}
+.cite .doi{font-family:var(--f-mono); font-size:12px; color:var(--ink-3); display:block; margin-top:7px;}
+
+.tiles{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+  gap:1px; background:var(--rule); border:1px solid var(--rule);
+  border-radius:9px; overflow:hidden; margin-top:24px; max-width:700px;
+}
+.tile{background:var(--surface); padding:17px 18px;}
+.tile .v{
+  font-family:var(--f-head); font-size:29px; font-weight:700;
+  letter-spacing:-.03em; font-variant-numeric:tabular-nums; line-height:1.1;
+}
+.tile .k{
+  font-family:var(--f-head); font-size:11px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin-top:5px;
+}
+.tile .n{font-size:13.5px; color:var(--ink-2); margin-top:6px; line-height:1.4;}
+
+/* ---------- sections ---------- */
+section{padding:52px 0; border-bottom:1px solid var(--rule);}
+section:last-of-type{border-bottom:0;}
+.kicker{
+  font-family:var(--f-head); font-size:11.5px; font-weight:680;
+  letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3);
+  margin:0 0 14px; display:flex; align-items:center; gap:8px;
+}
+.kicker::before{
+  content:""; width:20px; height:2px; background:var(--rule-2); border-radius:2px; flex:none;
+}
+.kicker.k-local{color:var(--local-ink);} .kicker.k-local::before{background:var(--local);}
+.kicker.k-global{color:var(--global-ink);} .kicker.k-global::before{background:var(--global);}
+@media (min-width:1080px){
+  .railed .kicker{margin-top:8px; display:block;}
+  .railed .kicker::before{display:block; margin-bottom:9px; width:26px;}
+  .railed .rail-note{
+    font-family:var(--f-head); font-size:12.5px; line-height:1.5;
+    color:var(--ink-3); margin-top:14px;
+  }
+}
+.rail-note{display:none;}
+@media (min-width:1080px){ .rail-note{display:block;} }
+
+h2{
+  font-family:var(--f-head); font-size:clamp(26px,3.3vw,34px);
+  line-height:1.14; letter-spacing:-.022em; font-weight:700;
+  margin:0 0 18px; text-wrap:balance;
+}
+h3{
+  font-family:var(--f-head); font-size:19px; font-weight:650;
+  letter-spacing:-.012em; margin:34px 0 10px; text-wrap:balance;
+}
+h4{
+  font-family:var(--f-head); font-size:13px; font-weight:660;
+  letter-spacing:.07em; text-transform:uppercase; color:var(--ink-2);
+  margin:26px 0 8px;
+}
+p{margin:0 0 17px;}
+.col > p:last-child{margin-bottom:0;}
+strong{font-weight:600; color:var(--ink);}
+em{font-style:italic;}
+a{color:var(--global-ink);}
+a:focus-visible, button:focus-visible, summary:focus-visible{
+  outline:2px solid var(--global); outline-offset:3px; border-radius:3px;
+}
+
+ul,ol{margin:0 0 17px; padding-left:22px;}
+li{margin-bottom:8px;}
+li::marker{color:var(--ink-3);}
+
+code{
+  font-family:var(--f-mono); font-size:.86em;
+  background:var(--surface-3); padding:1.5px 5px; border-radius:4px;
+}
+
+/* ---------- callouts ---------- */
+.note{
+  border:1px solid var(--rule); background:var(--surface);
+  border-radius:9px; padding:18px 20px; margin:24px 0;
+  font-size:16.5px; line-height:1.55;
+}
+.note p:last-child{margin-bottom:0;}
+.note .lab{
+  font-family:var(--f-head); font-size:11px; font-weight:680;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3);
+  margin-bottom:8px;
+}
+.note.n-local{background:var(--local-wash); border-color:transparent;}
+.note.n-local .lab{color:var(--local-ink);}
+.note.n-global{background:var(--global-wash); border-color:transparent;}
+.note.n-global .lab{color:var(--global-ink);}
+.note.n-warn{background:var(--warn-wash); border-color:transparent;}
+.note.n-warn .lab{color:var(--warn-ink);}
+
+.plain{
+  border-left:3px solid var(--rule-2); padding:2px 0 2px 18px;
+  margin:22px 0; font-size:17px; color:var(--ink-2);
+}
+.plain .lab{
+  font-family:var(--f-head); font-size:10.5px; font-weight:680;
+  letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3);
+  display:block; margin-bottom:5px;
+}
+.plain p:last-child{margin-bottom:0;}
+
+/* ---------- figures (break out of the measure) ---------- */
+figure{
+  margin:32px 0; max-width:900px;
+  background:var(--surface); border:1px solid var(--rule);
+  border-radius:10px; padding:24px 24px 18px;
+}
+figure svg{display:block; width:100%; max-width:100%; height:auto; color:var(--ink);}
+figcaption{
+  font-family:var(--f-head); font-size:13.5px; line-height:1.5;
+  color:var(--ink-2); margin-top:16px; padding-top:14px;
+  border-top:1px solid var(--rule);
+}
+figcaption b{color:var(--ink); font-weight:640;}
+
+.plate{background:var(--plate); border-radius:8px; padding:20px 18px 14px;}
+.plate svg{color:var(--plate-ink);}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto; margin:26px 0; max-width:900px;
+    border:1px solid var(--rule); border-radius:9px; background:var(--surface);}
+table{border-collapse:collapse; width:100%; font-family:var(--f-head); font-size:14.5px;}
+th,td{padding:11px 15px; text-align:left; border-bottom:1px solid var(--rule);}
+th{
+  font-size:11px; font-weight:680; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-3); background:var(--surface-2); white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0;}
+td.num, th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;}
+td.lead{font-weight:600; color:var(--ink);}
+.pill{
+  display:inline-block; font-size:11px; font-weight:650; letter-spacing:.05em;
+  padding:2px 8px; border-radius:20px; text-transform:uppercase;
+}
+.pill.local{background:var(--local-wash); color:var(--local-ink);}
+.pill.global{background:var(--global-wash); color:var(--global-ink);}
+
+/* ---------- chart ---------- */
+.chart{
+  margin:30px 0; max-width:900px; background:var(--surface);
+  border:1px solid var(--rule); border-radius:10px; padding:22px 24px 16px;
+}
+.chart-h{font-family:var(--f-head); margin-bottom:4px;}
+.chart-h .t{font-size:16px; font-weight:650; letter-spacing:-.01em;}
+.chart-h .s{font-size:13px; color:var(--ink-2); margin-top:3px;}
+.chart svg{display:block; width:100%; height:auto; overflow:visible;}
+.chart text{font-family:var(--f-head); fill:var(--ink-2);}
+.ax-line{stroke:var(--rule-2); stroke-width:1;}
+.grid-line{stroke:var(--rule); stroke-width:1;}
+.dot-rule{stroke:var(--rule-2); stroke-width:1; stroke-dasharray:2 3;}
+details.data{margin-top:14px; border-top:1px solid var(--rule); padding-top:12px;}
+details.data summary{
+  font-family:var(--f-head); font-size:12.5px; font-weight:600;
+  color:var(--ink-2); cursor:pointer; list-style:none;
+}
+details.data summary::-webkit-details-marker{display:none;}
+details.data summary::before{content:"▸ "; color:var(--ink-3);}
+details.data[open] summary::before{content:"▾ ";}
+details.data .tw{margin:12px 0 0; border-radius:7px;}
+
+/* ---------- glossary ---------- */
+.gloss{
+  display:grid; gap:1px; background:var(--rule);
+  border:1px solid var(--rule); border-radius:9px; overflow:hidden;
+  max-width:900px; margin:26px 0;
+}
+.gterm{background:var(--surface); padding:16px 20px;}
+.gterm dt{
+  font-family:var(--f-head); font-size:14.5px; font-weight:660;
+  letter-spacing:-.005em; margin-bottom:5px;
+}
+.gterm dd{margin:0; font-size:15.5px; line-height:1.52; color:var(--ink-2);}
+.gterm dd b{color:var(--ink); font-weight:600;}
+
+/* ---------- footer ---------- */
+footer{
+  background:var(--surface); border-top:1px solid var(--rule);
+  padding:40px 0 56px; margin-top:0;
+}
+.next{
+  display:block; max-width:640px; text-decoration:none;
+  border:1px solid var(--rule); border-radius:10px; padding:22px 24px;
+  background:var(--surface-2);
+}
+.next:hover{border-color:var(--rule-2);}
+.next .l{
+  font-family:var(--f-head); font-size:11px; font-weight:680;
+  letter-spacing:.11em; text-transform:uppercase; color:var(--ink-3);
+}
+.next .t{
+  font-family:var(--f-head); font-size:23px; font-weight:700;
+  letter-spacing:-.02em; color:var(--ink); margin:7px 0 6px;
+}
+.next .d{font-size:15.5px; color:var(--ink-2); line-height:1.5;}
+.colophon{
+  font-family:var(--f-head); font-size:12.5px; color:var(--ink-3);
+  max-width:640px; margin-top:32px; line-height:1.6;
+}
+
+html{scroll-behavior:smooth; scroll-padding-top:68px;}
+@media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto;} *{transition:none!important;} }
+</style>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="tb-mark"><span class="tb-dots"><i></i><i></i></span> BVI-Net · the paper</span>
+    <nav class="tb-nav">
+      <a href="#problem">Problem</a>
+      <a href="#biology">Biology</a>
+      <a href="#local">Local</a>
+      <a href="#global">Global</a>
+      <a href="#skips">Skips</a>
+      <a href="#whole">Full model</a>
+      <a href="#scoring">Scoring</a>
+      <a href="#claims">Claims</a>
+      <a href="#jargon">Jargon</a>
+    </nav>
+    <a class="tb-companion" href="https://claude.ai/code/artifact/05507db7-7d82-4f6f-bf30-0304a9340896">Our replication →</a>
+  </div>
+</div>
+
+<div class="frame">
+  <header class="hero">
+    <p class="eyebrow">Paper summary · IEEE TCSVT 2025</p>
+    <h1>How BVI&#8209;Net works</h1>
+    <p class="standfirst">A plain-language walk through <strong>“Ultra-Lightweight Network for Medical Image Segmentation Inspired by Bio-Visual Interaction”</strong> — a segmentation network with <strong>26,000 parameters</strong>, roughly <strong>1,700× smaller than VM-UNet</strong>, built by copying how the human visual system splits work between two pathways.</p>
+
+    <div class="cite">
+      <span class="t">Ultra-Lightweight Network for Medical Image Segmentation Inspired by Bio-Visual Interaction</span>
+      <span class="m">Zhefei Cai, Yingle Fan, Minwei Zhu, Tao Fang · IEEE Transactions on Circuits and Systems for Video Technology · Vol. 35, No. 4, April 2025, pp. 3486–3497</span>
+      <span class="doi">DOI 10.1109/TCSVT.2024.3507383</span>
+    </div>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="v">0.026<span style="font-size:17px;font-weight:600;">M</span></div>
+        <div class="k">Parameters</div>
+        <div class="n">26,000 numbers. A mid-range phone photo has more pixels than this model has weights.</div>
+      </div>
+      <div class="tile">
+        <div class="v">0.025</div>
+        <div class="k">GFLOPs</div>
+        <div class="n">Arithmetic per image. U-Net-class models sit in the tens of GFLOPs.</div>
+      </div>
+      <div class="tile">
+        <div class="v">292</div>
+        <div class="k">Frames / second</div>
+        <div class="n">Fast enough to segment a live dermoscope video feed, not just still photos.</div>
+      </div>
+    </div>
+  </header>
+
+  <section id="about">
+    <div class="railed">
+      <div><p class="kicker">Read this first</p></div>
+      <div class="col">
+        <div class="note">
+          <div class="lab">About this page</div>
+          <p>This is a study companion, not the paper. Every claim and number here is traced to one of three sources: the paper's own reported figures as recorded in our group's slide deck, the section and equation references our implementation notes cite (<code>Sec. III-A</code>, <code>Eq. 5</code>, <code>Table V</code> and so on), and standard textbook neuroscience where the page explains the biology. Where the paper leaves a detail unstated, this page says so rather than filling the gap.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 1. PROBLEM ============================== -->
+  <section id="problem">
+    <div class="railed">
+      <div>
+        <p class="kicker">The setting</p>
+        <p class="rail-note">Segmentation accuracy has mostly been bought with size. That currency doesn't spend in a clinic.</p>
+      </div>
+      <div class="col">
+        <h2>Good segmentation models got too heavy to use</h2>
+
+        <p><strong>Segmentation</strong> means labelling every single pixel of an image as either “this is the thing” or “this is not the thing”. Feed in a dermoscopy photo of a mole; get back a black-and-white <strong>mask</strong> where white marks exactly the lesion and black marks healthy skin. That outline is what a clinician actually needs — it gives the lesion's size, its border shape, and how irregular that border is, which are three of the strongest signals for melanoma.</p>
+
+        <p>The field has chased accuracy on this task the obvious way: bigger models. U-Net, the classic, carries <strong>13.4 million</strong> learned numbers. VM-UNet, a recent Mamba-based one, carries <strong>44.3 million</strong>. Both work well. Both also assume you have a discrete GPU sitting under the desk.</p>
+
+        <h3>Why size is a real problem here, not a vanity metric</h3>
+
+        <p>Two separate pressures push in the same direction:</p>
+
+        <ul>
+          <li><strong>The hardware is small.</strong> The useful place for this model is inside a handheld dermoscope, a clinic laptop, or a phone in a rural screening camp — not a datacentre. A 44M-parameter network doesn't fit that budget in memory, in power draw, or in latency.</li>
+          <li><strong>The data is small.</strong> ISIC2018, one of the largest public skin-lesion sets, has <strong>2,594</strong> annotated training images. Medical annotation needs an expert with a mouse, so datasets stay in the thousands, not the millions. A 44M-parameter model facing 2,594 examples has enough capacity to simply memorise them, and memorising is not learning — it looks brilliant on the training set and falls apart on a new clinic's camera.</li>
+        </ul>
+
+        <p>So “make it smaller” isn't only about deployment. On datasets this size, a smaller model is often the <em>better-generalising</em> model.</p>
+      </div>
+    </div>
+
+    <div class="chart" style="margin-left:auto;margin-right:auto;">
+      <div class="chart-h">
+        <div class="t">Parameter count, segmentation models</div>
+        <div class="s">Log scale — each gridline is 10× the one before. Positions, not bar lengths, carry the value.</div>
+      </div>
+      <svg viewBox="0 0 860 268" role="img" aria-label="Dot plot on a logarithmic scale comparing model sizes: VM-UNet 44.3 million parameters, U-Net 13.4 million, MALUNet 0.178 million, EGE-UNet 0.053 million, UltraLight VM-UNet 0.049 million, and BVI-Net 0.026 million — the smallest by a wide margin.">
+        <g id="sizegrid"></g>
+        <g id="sizerows"></g>
+      </svg>
+      <details class="data">
+        <summary>Show data table</summary>
+        <div class="tw"><table>
+          <thead><tr><th>Model</th><th class="num">Parameters</th><th class="num">× BVI-Net</th></tr></thead>
+          <tbody>
+            <tr><td class="lead">VM-UNet</td><td class="num">44,300,000</td><td class="num">1,704×</td></tr>
+            <tr><td class="lead">U-Net</td><td class="num">13,400,000</td><td class="num">515×</td></tr>
+            <tr><td class="lead">MALUNet</td><td class="num">178,000</td><td class="num">6.8×</td></tr>
+            <tr><td class="lead">EGE-UNet</td><td class="num">53,000</td><td class="num">2.0×</td></tr>
+            <tr><td class="lead">UltraLight VM-UNet</td><td class="num">49,000</td><td class="num">1.9×</td></tr>
+            <tr><td class="lead">BVI-Net</td><td class="num">26,000</td><td class="num">1×</td></tr>
+          </tbody>
+        </table></div>
+      </details>
+    </div>
+
+    <div class="frame" style="padding:0;">
+      <div class="railed">
+        <div></div>
+        <div class="col">
+          <h3>The gap the paper aims at</h3>
+          <p>Lightweight models already exist — MALUNet, EGE-UNet and UltraLight VM-UNet all sit under 0.2M parameters. But the paper argues each of them buys its small size by giving up one half of what segmentation needs:</p>
+          <ul>
+            <li><strong>Lightweight CNNs</strong> (MALUNet, EGE-UNet) are excellent at <em>local</em> detail — edges, texture, the exact pixel where lesion becomes skin. But a convolution only ever looks at a small neighbourhood, so they fuse <em>global</em> context poorly. They can trace a boundary beautifully and still trace the wrong object.</li>
+            <li><strong>Mamba / state-space models</strong> (VM-UNet and relatives) are the opposite — they see the whole image cheaply and know roughly where the lesion is, but they smooth over fine local detail and lose small lesions entirely.</li>
+          </ul>
+          <p>Nobody had both at an ultra-lightweight scale. BVI-Net's proposal is that you don't have to choose, because <em>biology already didn't</em>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 2. BIOLOGY ============================== -->
+  <section id="biology">
+    <div class="railed">
+      <div>
+        <p class="kicker">The borrowed idea</p>
+        <p class="rail-note">Your visual cortex runs two parallel pathways with different jobs. The paper turns that split into an architecture.</p>
+      </div>
+      <div class="col">
+        <h2>Your brain already solved this, twice over</h2>
+
+        <p>When light hits your retina, the signal doesn't travel one road to one “seeing” region. After an early relay, it splits into <strong>two streams</strong> that run in parallel and specialise:</p>
+
+        <ul>
+          <li><strong>The dorsal stream</strong> — the upper route, often called the <em>“where”</em> pathway. It is <strong>fast and coarse</strong>. It answers questions like <em>where is that, how big, is it moving</em>. It does not care what colour or texture the thing is.</li>
+          <li><strong>The ventral stream</strong> — the lower route, the <em>“what”</em> pathway. It is <strong>slow and detailed</strong>. It runs through visual areas V1 → V2 → V4 → IT, building up from tiny oriented edges to textures to whole recognised objects.</li>
+        </ul>
+
+        <p>The crucial part — the part BVI-Net is named after — is that these two streams <strong>interact</strong>. The fast dorsal stream gets a rough answer first, and that rough answer steers where the slow ventral stream spends its detailed effort. You experience this constantly: you catch a blur of movement in your periphery (dorsal, fast, vague), your attention snaps there, and only <em>then</em> do you resolve what it actually is (ventral, slow, precise).</p>
+
+        <div class="plain">
+          <span class="lab">In one line</span>
+          <p>Two lookers. One is fast and blurry and finds the thing; one is slow and sharp and describes it. The fast one tells the sharp one where to look. That's the entire architecture.</p>
+        </div>
+      </div>
+    </div>
+
+    <figure style="margin-left:auto;margin-right:auto;">
+      <svg viewBox="0 0 880 300" role="img" aria-label="Diagram mapping the human visual system onto BVI-Net. On the left, the retina splits into a fast coarse dorsal stream and a slow detailed ventral stream, with the dorsal stream steering the ventral one. On the right, the input image splits into a Global Pathway and a Local Pathway, with the Global Pathway gating the Local Pathway, and both feeding a fused output.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+          </marker>
+          <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="#2A78D6"/>
+          </marker>
+        </defs>
+
+        <!-- panel labels -->
+        <text x="14" y="20" font-size="11.5" font-weight="700" letter-spacing="1.4" fill="currentColor" opacity=".55">HUMAN VISUAL SYSTEM</text>
+        <text x="470" y="20" font-size="11.5" font-weight="700" letter-spacing="1.4" fill="currentColor" opacity=".55">BVI-NET</text>
+        <line x1="438" y1="8" x2="438" y2="292" stroke="currentColor" stroke-width="1" opacity=".18"/>
+
+        <!-- LEFT PANEL -->
+        <rect x="14" y="128" width="76" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".65"/>
+        <text x="52" y="154" font-size="12.5" text-anchor="middle" fill="currentColor">Retina</text>
+
+        <line x1="90" y1="142" x2="128" y2="88"  stroke="#2A78D6" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <line x1="90" y1="156" x2="128" y2="212" stroke="#EB6834" stroke-width="1.6" marker-end="url(#ah)" style="color:#EB6834"/>
+
+        <rect x="132" y="58" width="188" height="52" rx="6" fill="#2A78D6" fill-opacity=".10" stroke="#2A78D6" stroke-width="1.4"/>
+        <text x="226" y="80" font-size="13" font-weight="650" text-anchor="middle" fill="#2A78D6">Dorsal stream</text>
+        <text x="226" y="98" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".7">fast · coarse · “where”</text>
+
+        <rect x="132" y="190" width="188" height="52" rx="6" fill="#EB6834" fill-opacity=".12" stroke="#EB6834" stroke-width="1.4"/>
+        <text x="226" y="212" font-size="13" font-weight="650" text-anchor="middle" fill="#EB6834">Ventral stream</text>
+        <text x="226" y="230" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".7">V1 → V2 → V4 · detail · “what”</text>
+
+        <path d="M226,110 L226,186" stroke="#2A78D6" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ahg)"/>
+        <text x="236" y="152" font-size="11.5" fill="#2A78D6" font-weight="600">steers attention</text>
+
+        <line x1="320" y1="84"  x2="386" y2="140" stroke="currentColor" stroke-width="1.3" opacity=".55" marker-end="url(#ah)"/>
+        <line x1="320" y1="216" x2="386" y2="160" stroke="currentColor" stroke-width="1.3" opacity=".55" marker-end="url(#ah)"/>
+        <text x="394" y="146" font-size="12" fill="currentColor" opacity=".7">what</text>
+        <text x="394" y="164" font-size="12" fill="currentColor" opacity=".7">+ where</text>
+
+        <!-- RIGHT PANEL -->
+        <rect x="462" y="128" width="82" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".65"/>
+        <text x="503" y="147" font-size="12.5" text-anchor="middle" fill="currentColor">Dermoscopy</text>
+        <text x="503" y="161" font-size="12.5" text-anchor="middle" fill="currentColor">image</text>
+
+        <line x1="544" y1="142" x2="582" y2="88"  stroke="#2A78D6" stroke-width="1.6" marker-end="url(#ahg)"/>
+        <line x1="544" y1="156" x2="582" y2="212" stroke="#EB6834" stroke-width="1.6" marker-end="url(#ah)" style="color:#EB6834"/>
+
+        <rect x="586" y="58" width="196" height="52" rx="6" fill="#2A78D6" fill-opacity=".10" stroke="#2A78D6" stroke-width="1.4"/>
+        <text x="684" y="80" font-size="13" font-weight="650" text-anchor="middle" fill="#2A78D6">Global Pathway</text>
+        <text x="684" y="98" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".7">FA-VSSM · state space scan</text>
+
+        <rect x="586" y="190" width="196" height="52" rx="6" fill="#EB6834" fill-opacity=".12" stroke="#EB6834" stroke-width="1.4"/>
+        <text x="684" y="212" font-size="13" font-weight="650" text-anchor="middle" fill="#EB6834">Local Pathway</text>
+        <text x="684" y="230" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".7">Gabor convolution · edges</text>
+
+        <path d="M684,110 L684,186" stroke="#2A78D6" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ahg)"/>
+        <text x="694" y="152" font-size="11.5" fill="#2A78D6" font-weight="600">gates (multiplies)</text>
+
+        <line x1="782" y1="84"  x2="838" y2="140" stroke="currentColor" stroke-width="1.3" opacity=".55" marker-end="url(#ah)"/>
+        <line x1="782" y1="216" x2="838" y2="160" stroke="currentColor" stroke-width="1.3" opacity=".55" marker-end="url(#ah)"/>
+        <text x="846" y="154" font-size="12" fill="currentColor" opacity=".7">mask</text>
+      </svg>
+      <figcaption><b>The one-to-one mapping the paper is built on.</b> The dashed arrow is the “bio-visual interaction” in the title: in the brain the fast stream steers attention, and in the network the Global Pathway's output is squashed to 0–1 and <em>multiplied</em> into the Local Pathway's features — mathematically, a highlighter over the lesion region.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================== 3. LOCAL ============================== -->
+  <section id="local">
+    <div class="railed">
+      <div>
+        <p class="kicker k-local">Component one</p>
+        <p class="rail-note">Ventral stream. Gabor-shaped kernels, four orientations, weights shared across the whole layer.</p>
+      </div>
+      <div class="col">
+        <h2>The Local Pathway: convolution that starts out knowing about edges</h2>
+
+        <p>A <strong>convolution kernel</strong> is a small grid of numbers — here 5×5 — that slides over the image. At every position it multiplies its 25 numbers against the 25 pixels underneath and adds them up. The result is one number saying “how strongly does this patch match my pattern”. Slide it everywhere and you get a map of where that pattern occurs.</p>
+
+        <p>Normally these 25 numbers start as <strong>random noise</strong> and the network spends thousands of training steps discovering, from scratch, that edges are useful. Notably, when you look at what a trained network's first layer actually learned, it is almost always a set of <em>oriented edge detectors</em> — and those look almost exactly like the receptive fields neuroscientists measured in cat and monkey V1 neurons in the 1980s, which are well described by <strong>Gabor functions</strong> (a striped wave fading out under a Gaussian blob).</p>
+
+        <p>BVI-Net's move is to skip the rediscovery. <strong>Initialise the kernels as Gabor functions at four angles</strong> — 0°, 45°, 90°, 135° — so the layer begins where a trained network would have ended up, then let training fine-tune from there. Fewer wasted steps, and far fewer parameters needed to get there.</p>
+      </div>
+    </div>
+
+    <figure style="margin-left:auto;margin-right:auto;">
+      <div class="plate">
+        <svg viewBox="0 0 700 168" role="img" aria-label="Four 5 by 5 Gabor kernels at 0, 45, 90 and 135 degrees, drawn as greyscale grids. White cells are positive weights, black cells negative, mid-grey near zero. Each forms a striped bar perpendicular to its angle.">
+          <g id="gabor"></g>
+        </svg>
+      </div>
+      <figcaption><b>The four starting kernels, rendered from the project's own <code>gabor_kernel()</code> function.</b> White = positive weight, black = negative, mid-grey = near zero. Each kernel fires hardest when a bright stripe at its own angle sits under it — so the 90° kernel finds horizontal edges, the 0° kernel finds vertical ones. Shown on a dark plate because that is how receptive fields are conventionally drawn.</figcaption>
+    </figure>
+
+    <div class="railed">
+      <div></div>
+      <div class="col">
+        <h3>Orientation bias: V1/V2 and V4 are told to care about different angles</h3>
+
+        <p>Real visual cortex is not neutral about angle. Neurons are measurably over-represented for some orientations, and the bias differs by area. The paper models two of these biases (its Equations 1–4) and hands them to different depths of the encoder:</p>
+
+        <div class="tw" style="max-width:640px;">
+          <table>
+            <thead><tr><th>Encoder stages</th><th>Simulates</th><th>Orientation bias applied</th></tr></thead>
+            <tbody>
+              <tr><td class="lead">1 – 2 (shallow)</td><td>V1 / V2</td><td>Combined <em>cardinal + radial</em> — all four angles boosted equally, ×1.18</td></tr>
+              <tr><td class="lead">3 – 5 (deep)</td><td>V4</td><td><em>Cardinal only</em> — 0° and 90° boosted ×1.26, the diagonals damped ×0.74</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Read plainly: early layers stay open-minded about angle because they are still gathering raw edge evidence. Deeper layers are nudged toward vertical and horizontal structure, mirroring the cardinal-orientation preference seen in higher visual areas. These multipliers are fixed constants — they cost <strong>zero</strong> parameters.</p>
+
+        <h3 id="sharing">The weight-sharing trick that makes it ultra-light</h3>
+
+        <p>This is the part that actually buys the 0.026M budget, and it is easy to skim past. The paper states that <strong>the weights of the different orientation kernels in the same layer are shared</strong>.</p>
+
+        <p>Concretely: an ordinary convolution layer with 16 input channels and 16 output channels and a 5×5 kernel stores a separate 5×5 grid for <em>every</em> input–output channel pair — that's 16 × 16 × 25 = 6,400 numbers in one layer. The shared version instead stores <strong>one 5×5 grid per orientation — four grids, 100 numbers total</strong> — applies all four to every channel, and then uses a cheap 1×1 convolution to mix the results down to the output width.</p>
+
+        <div class="note n-local">
+          <div class="lab">Why sharing works here</div>
+          <p>An edge at 45° is an edge at 45° whether you find it in the red channel, the blue channel, or channel 11 of some deep feature map. There is no reason to learn that same detector 256 separate times. Sharing one detector across all channels is not a compromise — for oriented edge detection it is arguably the more correct design, and it happens to cost dramatically less.</p>
+        </div>
+
+        <p>This distinction — <em>sharing the weights</em> versus merely <em>initialising every weight from the same Gabor shape</em> — turned out to be the single most important sentence in the paper for our replication. Getting it wrong left our model roughly twice as large as it should have been. <a href="https://claude.ai/code/artifact/05507db7-7d82-4f6f-bf30-0304a9340896#sharing">That story is in the companion document.</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 4. GLOBAL ============================== -->
+  <section id="global">
+    <div class="railed">
+      <div>
+        <p class="kicker k-global">Component two</p>
+        <p class="rail-note">Dorsal stream. A state-space model reading the image as a sequence, four different ways at once.</p>
+      </div>
+      <div class="col">
+        <h2>The Global Pathway: FA-VSSM</h2>
+
+        <p>The name unpacks as <strong>F</strong>ast-<strong>A</strong>ttention <strong>V</strong>isual <strong>S</strong>tate <strong>S</strong>pace <strong>M</strong>odule. It has two channels working side by side: a state-space channel that reads the whole image cheaply, and a fast-attention channel that decides which parts of that reading to trust.</p>
+
+        <h3>What a state space model is, without the maths</h3>
+
+        <p>Think of reading a long sentence. You don't re-read every previous word at each new word — you carry a compressed running summary in your head and update it as you go. A <strong>state space model</strong> (SSM) does exactly that with numbers: it walks along a sequence keeping a fixed-size “state” vector, updating it at each step.</p>
+
+        <p>The reason this matters is <strong>cost</strong>. Transformer self-attention compares every position against every other position, so doubling the sequence quadruples the work — for a 256×256 image that's 65,536 positions and the comparison table is astronomically large. An SSM's cost grows <strong>linearly</strong> with sequence length. <strong>Mamba</strong> is the specific modern SSM the paper uses; its contribution is making the state update <em>selective</em>, so the model can choose to remember or forget based on what it is currently looking at.</p>
+
+        <h3>The awkward part: an image is not a sequence</h3>
+
+        <p>To feed a picture to a sequence model you must flatten it into a line of pixels. And <strong>the order you pick changes what counts as “nearby”</strong>. Read row by row and two pixels vertically adjacent end up 256 steps apart in the sequence — the model has to carry information about one across 255 unrelated pixels to relate them.</p>
+
+        <p>BVI-Net's answer is to not pick one order. It scans the feature map <strong>four ways</strong>, runs the SSM along each, un-scrambles each result back into image shape, and <strong>averages them</strong>. Whatever one scan order distorts, another preserves.</p>
+      </div>
+    </div>
+
+    <figure style="margin-left:auto;margin-right:auto;">
+      <svg viewBox="0 0 700 200" role="img" aria-label="Four scan orders over an 8 by 8 grid: line scan reads row by row; column scan reads column by column; the Z-curve scan visits 2 by 2 blocks recursively; the Hilbert curve snakes so consecutive steps are always adjacent cells.">
+        <defs>
+          <marker id="sh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,2 L8,5 L0,8 z" fill="#2A78D6"/>
+          </marker>
+        </defs>
+        <g id="scans"></g>
+      </svg>
+      <figcaption><b>The four scan paths, traced from the project's own <code>_scan_order()</code> code on an 8×8 grid.</b> Line and column are the naive readings. The <b>Z-curve</b> and <b>Hilbert curve</b> are space-filling curves: they zig through the image so that pixels close together on the page stay close together in the sequence. Hilbert is the strictest — every consecutive step moves to a touching cell, never jumping.</figcaption>
+    </figure>
+
+    <div class="railed">
+      <div></div>
+      <div class="col">
+        <h3>The “fast attention” half</h3>
+
+        <p>Running alongside the scans is a deliberately cheap attention mechanism (the paper's Equation 5). It works in three steps:</p>
+
+        <ol>
+          <li><strong>Squash the channels two ways.</strong> At every pixel position, take the <em>average</em> across all channels, and separately the <em>maximum</em>. This collapses a feature map of any depth into just two single-channel maps. Average says “how much is generally happening here”; maximum says “what is the strongest single response here”.</li>
+          <li><strong>One convolution.</strong> Slide a single 7×7 kernel over those two stacked maps to produce one map.</li>
+          <li><strong>Squash to 0–1.</strong> A sigmoid turns that map into a per-pixel weight between 0 and 1 — an attention mask.</li>
+        </ol>
+
+        <p>That entire attention module is <strong>one small convolution</strong>. It costs essentially nothing, which is the whole point of calling it <em>fast</em> attention. The module's final output is the input plus the scanned global features multiplied by this mask: <code>out = norm(x + attention × ssm_output)</code>. Global context gets added back, but only where the attention map says it is worth adding.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 5. SKIPS ============================== -->
+  <section id="skips">
+    <div class="railed">
+      <div>
+        <p class="kicker">Component three</p>
+        <p class="rail-note">Skip connections that reason about regions instead of copying pixels.</p>
+      </div>
+      <div class="col">
+        <h2>GCN Attention skips: letting distant regions talk</h2>
+
+        <p>Segmentation networks are shaped like a <strong>U</strong>. The left arm (the encoder) repeatedly shrinks the image while growing the number of feature channels — going from “256×256 pixels, 3 colours” toward “16×16 positions, many abstract features”. The right arm (the decoder) reverses that, blowing the small map back up to full resolution to produce the output mask.</p>
+
+        <p>The problem with shrinking is that <strong>fine detail is destroyed and cannot be invented back</strong>. So U-shaped networks add <strong>skip connections</strong>: a copy of each encoder stage's high-resolution features is handed sideways to the matching decoder stage, so the decoder gets both the semantic understanding from below and the crisp detail from the side. This is why U-Nets produce sharp boundaries at all.</p>
+
+        <p>But a plain skip copies <em>everything</em> at that resolution — the lesion boundary and also every hair, air bubble, ruler mark and colour patch in the frame. BVI-Net's skips do something smarter before handing the features over (Equations 6–8):</p>
+
+        <ol>
+          <li><strong>Project pixels into regions.</strong> A 1×1 convolution plus a softmax assigns every pixel a soft membership across <strong>N graph nodes</strong>. Each node ends up as a weighted average of the pixels that belong to it — think “this node is the dark centre of the lesion”, “this node is the fading border”, “this node is background skin”. Thousands of pixels become a handful of regions.</li>
+          <li><strong>Let the regions talk.</strong> A <strong>graph convolution</strong> lets every node exchange information with every other node through a learned adjacency matrix. Because they are nodes and not pixels, distance on the image no longer matters — the top-left corner of the lesion can directly influence the bottom-right in a single step.</li>
+          <li><strong>Paint the answer back onto pixels.</strong> The same soft membership map, used in reverse, spreads the refined node features back over the image, and the result is added to the original features as a residual.</li>
+        </ol>
+      </div>
+    </div>
+
+    <figure style="margin-left:auto;margin-right:auto;">
+      <svg viewBox="0 0 860 220" role="img" aria-label="GCN attention skip in four steps: a pixel feature map is softly assigned to N graph nodes, the nodes exchange information through a learned adjacency matrix, the refined nodes are projected back onto pixels, and the result is added to the original features as a residual.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- 1: pixel grid -->
+        <g id="pixgrid"></g>
+        <text x="66" y="30" font-size="12" text-anchor="middle" fill="currentColor" opacity=".75">Feature map</text>
+        <text x="66" y="196" font-size="11" text-anchor="middle" fill="currentColor" opacity=".5">H × W pixels</text>
+
+        <line x1="136" y1="112" x2="196" y2="112" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)" opacity=".7"/>
+        <text x="166" y="102" font-size="11" text-anchor="middle" fill="currentColor" opacity=".7">assign</text>
+
+        <!-- 2: nodes -->
+        <circle cx="248" cy="70"  r="15" fill="#2A78D6" fill-opacity=".16" stroke="#2A78D6" stroke-width="1.4"/>
+        <circle cx="304" cy="102" r="15" fill="#2A78D6" fill-opacity=".16" stroke="#2A78D6" stroke-width="1.4"/>
+        <circle cx="244" cy="146" r="15" fill="#2A78D6" fill-opacity=".16" stroke="#2A78D6" stroke-width="1.4"/>
+        <circle cx="308" cy="172" r="15" fill="#2A78D6" fill-opacity=".16" stroke="#2A78D6" stroke-width="1.4"/>
+        <circle cx="216" cy="110" r="15" fill="#2A78D6" fill-opacity=".16" stroke="#2A78D6" stroke-width="1.4"/>
+        <g stroke="#2A78D6" stroke-width="1.1" opacity=".55">
+          <line x1="248" y1="70" x2="304" y2="102"/><line x1="248" y1="70" x2="216" y2="110"/>
+          <line x1="216" y1="110" x2="244" y2="146"/><line x1="244" y1="146" x2="308" y2="172"/>
+          <line x1="304" y1="102" x2="308" y2="172"/><line x1="304" y1="102" x2="244" y2="146"/>
+          <line x1="216" y1="110" x2="304" y2="102"/>
+        </g>
+        <text x="264" y="30" font-size="12" text-anchor="middle" fill="#2A78D6" font-weight="600">N graph nodes</text>
+        <text x="264" y="205" font-size="11" text-anchor="middle" fill="currentColor" opacity=".5">every node reaches every node</text>
+
+        <line x1="336" y1="112" x2="396" y2="112" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)" opacity=".7"/>
+        <text x="366" y="102" font-size="11" text-anchor="middle" fill="currentColor" opacity=".7">graph conv</text>
+
+        <!-- 3: refined nodes -->
+        <rect x="410" y="66" width="128" height="94" rx="7" fill="#2A78D6" fill-opacity=".10" stroke="#2A78D6" stroke-width="1.3"/>
+        <text x="474" y="106" font-size="12.5" text-anchor="middle" fill="#2A78D6" font-weight="600">Refined nodes</text>
+        <text x="474" y="126" font-size="11" text-anchor="middle" fill="currentColor" opacity=".65">long-range relations</text>
+        <text x="474" y="30" font-size="12" text-anchor="middle" fill="currentColor" opacity=".75">Reasoning</text>
+
+        <line x1="546" y1="112" x2="606" y2="112" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)" opacity=".7"/>
+        <text x="576" y="102" font-size="11" text-anchor="middle" fill="currentColor" opacity=".7">un-assign</text>
+
+        <!-- 4: back to pixels + residual -->
+        <g id="pixgrid2"></g>
+        <text x="672" y="30" font-size="12" text-anchor="middle" fill="currentColor" opacity=".75">Back to pixels</text>
+
+        <line x1="742" y1="112" x2="782" y2="112" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)" opacity=".7"/>
+        <circle cx="812" cy="112" r="15" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".7"/>
+        <line x1="804" y1="112" x2="820" y2="112" stroke="currentColor" stroke-width="1.4" opacity=".7"/>
+        <line x1="812" y1="104" x2="812" y2="120" stroke="currentColor" stroke-width="1.4" opacity=".7"/>
+        <path d="M66,178 Q66,214 812,214 L812,130" fill="none" stroke="currentColor" stroke-width="1.2"
+              stroke-dasharray="4 3" opacity=".45" marker-end="url(#ah2)"/>
+        <text x="812" y="60" font-size="11" text-anchor="middle" fill="currentColor" opacity=".65">to decoder</text>
+        <line x1="812" y1="94" x2="812" y2="70" stroke="currentColor" stroke-width="1.4" marker-end="url(#ah2)" opacity=".7"/>
+      </svg>
+      <figcaption><b>Pixels in, regions reasoned over, pixels out.</b> The dashed line is the residual: the original features are added back at the end, so the graph step can only <em>refine</em> the skip, never replace it. This is what keeps a small module from destroying the detail the skip exists to carry.</figcaption>
+    </figure>
+
+    <div class="railed">
+      <div></div>
+      <div class="col">
+        <div class="plain">
+          <span class="lab">Why bother</span>
+          <p>A lesion is one object even when it has a pale centre and a dark rim that look nothing alike pixel-by-pixel. Reasoning over a handful of regions instead of thousands of pixels is what lets the model conclude “these two very different-looking patches are the same lesion” — cheaply, since the graph is tiny.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 6. WHOLE ============================== -->
+  <section id="whole">
+    <div class="railed">
+      <div>
+        <p class="kicker">Assembly</p>
+        <p class="rail-note">Five encoder stages down, five decoder stages up, with the three components in their places.</p>
+      </div>
+      <div class="col">
+        <h2>The whole network, end to end</h2>
+        <p>Each of the five encoder stages runs both pathways in parallel on the same input, gates one with the other, saves the result as a skip, then halves the resolution and moves down. The decoder walks back up, and at each level pulls in the matching skip after it has passed through GCN attention.</p>
+      </div>
+    </div>
+
+    <figure style="margin-left:auto;margin-right:auto;">
+      <svg viewBox="0 0 860 420" role="img" aria-label="Full BVI-Net architecture. An input image enters five encoder stages, each running a Local Gabor pathway and a Global FA-VSSM pathway in parallel, with the global output gating the local one. Each fused stage output becomes a skip connection routed through GCN attention into the matching decoder stage. Five decoder stages upsample back to full resolution and a 1 by 1 convolution plus sigmoid produces the mask.">
+        <defs>
+          <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- ENCODER STAGE DETAIL (left, exploded) -->
+        <text x="14" y="18" font-size="11.5" font-weight="700" letter-spacing="1.3" fill="currentColor" opacity=".55">ONE ENCODER STAGE</text>
+        <rect x="14" y="30" width="286" height="212" rx="9" fill="none" stroke="currentColor" stroke-width="1" opacity=".22" stroke-dasharray="5 4"/>
+
+        <rect x="118" y="44" width="78" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".7"/>
+        <text x="157" y="64" font-size="11.5" text-anchor="middle" fill="currentColor">stage input</text>
+
+        <line x1="140" y1="74" x2="88"  y2="104" stroke="#EB6834" stroke-width="1.5" marker-end="url(#a3)" style="color:#EB6834"/>
+        <line x1="176" y1="74" x2="228" y2="104" stroke="#2A78D6" stroke-width="1.5" marker-end="url(#a3)" style="color:#2A78D6"/>
+
+        <rect x="26" y="108" width="122" height="46" rx="6" fill="#EB6834" fill-opacity=".12" stroke="#EB6834" stroke-width="1.3"/>
+        <text x="87" y="127" font-size="11.5" text-anchor="middle" fill="#EB6834" font-weight="650">Local: Gabor</text>
+        <text x="87" y="143" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".7">shared 4-orient. kernel</text>
+
+        <rect x="166" y="108" width="122" height="46" rx="6" fill="#2A78D6" fill-opacity=".10" stroke="#2A78D6" stroke-width="1.3"/>
+        <text x="227" y="127" font-size="11.5" text-anchor="middle" fill="#2A78D6" font-weight="650">Global: FA-VSSM</text>
+        <text x="227" y="143" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".7">4-way SSM scan</text>
+
+        <path d="M166,131 L152,131" stroke="#2A78D6" stroke-width="1.5" stroke-dasharray="3 2.5" marker-end="url(#a3)" style="color:#2A78D6"/>
+        <text x="157" y="170" font-size="10.5" text-anchor="middle" fill="#2A78D6" font-weight="600">σ(global) × local + local</text>
+
+        <line x1="87"  y1="154" x2="140" y2="186" stroke="currentColor" stroke-width="1.3" opacity=".6" marker-end="url(#a3)"/>
+        <line x1="227" y1="154" x2="176" y2="186" stroke="currentColor" stroke-width="1.3" opacity=".6" marker-end="url(#a3)"/>
+
+        <rect x="112" y="190" width="90" height="30" rx="5" fill="var(--surface-3)" stroke="currentColor" stroke-width="1.2" opacity=".8"/>
+        <text x="157" y="210" font-size="11.5" text-anchor="middle" fill="currentColor">fused</text>
+
+        <line x1="157" y1="220" x2="157" y2="248" stroke="currentColor" stroke-width="1.3" marker-end="url(#a3)" opacity=".6"/>
+        <text x="167" y="240" font-size="10.5" fill="currentColor" opacity=".6">↓ maxpool ×2 · and out as skip</text>
+
+        <!-- FULL U (right) -->
+        <text x="360" y="18" font-size="11.5" font-weight="700" letter-spacing="1.3" fill="currentColor" opacity=".55">FIVE STAGES DOWN, FIVE UP</text>
+        <line x1="330" y1="8" x2="330" y2="270" stroke="currentColor" stroke-width="1" opacity=".18"/>
+
+        <!-- encoder column -->
+        <g id="uenc"></g>
+        <!-- decoder column -->
+        <g id="udec"></g>
+        <!-- skips -->
+        <g id="uskip"></g>
+
+        <text x="360" y="270" font-size="11" fill="#EB6834" font-weight="600">encoder</text>
+        <text x="800" y="270" font-size="11" fill="currentColor" opacity=".7" text-anchor="end">decoder</text>
+
+        <!-- bottom flow -->
+        <line x1="30" y1="330" x2="30" y2="330" stroke="none"/>
+        <g id="bottom"></g>
+      </svg>
+      <figcaption><b>Left: what happens inside one encoder stage.</b> Both pathways see the same input; the Global Pathway's output is passed through a sigmoid to make a 0–1 gate, multiplied into the Local Pathway's features, and added back (so the local detail survives even where the gate is near zero). <b>Right: the U.</b> Each stage's fused output does double duty — it is halved and passed downward, and it is also sent sideways as a skip, which goes through GCN attention before the decoder concatenates it.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================== 7. SCORING ============================== -->
+  <section id="scoring">
+    <div class="railed">
+      <div>
+        <p class="kicker">Training &amp; measurement</p>
+        <p class="rail-note">Two losses because one is not enough, and six metrics because each hides a different failure.</p>
+      </div>
+      <div class="col">
+        <h2>How it is trained, and how it is scored</h2>
+
+        <h3>The loss: BCE + Dice, weighted equally</h3>
+
+        <p>A loss function is the single number the network tries to push down. BVI-Net adds two together in equal measure (Equation 9), and the reason is worth understanding because it is a classic medical-imaging trap.</p>
+
+        <ul>
+          <li><strong>Binary cross-entropy (BCE)</strong> scores each pixel independently: how confident and how correct was the prediction at this pixel? It gives clean, well-behaved gradients. Its weakness is <strong>class imbalance</strong> — in a typical dermoscopy image the lesion covers maybe 15% of the frame, so a model that predicts “background everywhere” already scores 85% and BCE is only mildly annoyed. That's a very comfortable local minimum to get stuck in.</li>
+          <li><strong>Dice loss</strong> scores the <em>overlap</em> between the predicted region and the true region as a whole. Predicting all-background gives a Dice of zero — total failure, no partial credit. This drags the model out of the trap. Its weakness is instability early in training when predictions are near-random.</li>
+        </ul>
+
+        <p>Together, BCE keeps training stable and Dice keeps it honest about the shape.</p>
+
+        <h3>The paper's training settings</h3>
+        <div class="tw" style="max-width:520px;">
+          <table>
+            <tbody>
+              <tr><td class="lead">Optimiser</td><td>AdamW</td></tr>
+              <tr><td class="lead">Initial learning rate</td><td class="num">0.001</td></tr>
+              <tr><td class="lead">Batch size</td><td class="num">64</td></tr>
+              <tr><td class="lead">Epochs</td><td class="num">50</td></tr>
+              <tr><td class="lead">Early stopping</td><td>stop after 5 epochs with no validation improvement</td></tr>
+              <tr><td class="lead">Input size</td><td class="num">256 × 256</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>The six metrics, and what each one hides</h3>
+        <p>Every metric can be gamed by a differently-broken model. Reading them as a set is the only safe way.</p>
+      </div>
+    </div>
+
+    <dl class="gloss" style="margin-left:auto;margin-right:auto;">
+      <div class="gterm"><dt>Dice coefficient</dt><dd>Twice the overlap area, divided by the sum of both areas. <b>The headline number</b> for segmentation. 1.0 is a perfect match, 0 is no overlap at all. Rewards getting the region right as a whole rather than pixel by pixel.</dd></div>
+      <div class="gterm"><dt>mIoU (mean Intersection over Union)</dt><dd>Overlap divided by combined area. Measures the same thing as Dice but punishes errors harder, so it always reads lower. Dice ≈ 0.86 corresponds to mIoU ≈ 0.79.</dd></div>
+      <div class="gterm"><dt>Accuracy</dt><dd>Fraction of all pixels labelled correctly. <b>The most misleading one here.</b> Because most pixels are background, a model that predicts “no lesion anywhere” still scores in the high 80s. Never read it alone.</dd></div>
+      <div class="gterm"><dt>Sensitivity (recall)</dt><dd>Of the pixels that really are lesion, what fraction did the model find? <b>Low sensitivity means missed lesion</b> — clinically the dangerous failure, because it under-calls disease.</dd></div>
+      <div class="gterm"><dt>Specificity</dt><dd>Of the pixels that really are healthy skin, what fraction did the model correctly leave alone? Low specificity means over-calling — flagging healthy skin as lesion. Sensitivity and specificity trade off against each other, which is exactly why both are reported.</dd></div>
+      <div class="gterm"><dt>ASSD (average symmetric surface distance)</dt><dd>The only metric here measured in <b>pixels, not percent</b>, and the only one about <em>boundary</em> quality. It averages how far each point on the predicted outline sits from the true outline, and vice versa. Lower is better. Two masks can have near-identical Dice while one has a smooth accurate edge and the other a ragged one — ASSD is what separates them.</dd></div>
+    </dl>
+  </section>
+
+  <!-- ============================== 8. CLAIMS ============================== -->
+  <section id="claims">
+    <div class="railed">
+      <div>
+        <p class="kicker">Results</p>
+        <p class="rail-note">Three organs, three datasets. This page and our replication both cover only the skin task.</p>
+      </div>
+      <div class="col">
+        <h2>What the paper reports</h2>
+
+        <p>BVI-Net is evaluated on three segmentation tasks — <strong>skin lesions</strong> (ISIC2018), <strong>liver</strong> (LiTS17) and <strong>brain tumours</strong> (BraTS19) — to show the design is not tuned to one organ. The headline skin-lesion results:</p>
+      </div>
+    </div>
+
+    <div class="tw" style="margin-left:auto;margin-right:auto;max-width:640px;">
+      <table>
+        <thead><tr><th>Metric, ISIC2018</th><th class="num">Reported</th></tr></thead>
+        <tbody>
+          <tr><td class="lead">Dice</td><td class="num">90.43 %</td></tr>
+          <tr><td class="lead">mIoU</td><td class="num">82.45 %</td></tr>
+          <tr><td class="lead">Accuracy</td><td class="num">95.86 %</td></tr>
+          <tr><td class="lead">Specificity</td><td class="num">97.15 %</td></tr>
+          <tr><td class="lead">Sensitivity</td><td class="num">91.14 %</td></tr>
+          <tr><td class="lead">Parameters</td><td class="num">0.026 M</td></tr>
+          <tr><td class="lead">GFLOPs</td><td class="num">0.025</td></tr>
+          <tr><td class="lead">Speed</td><td class="num">292 FPS</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="railed">
+      <div></div>
+      <div class="col">
+        <p>Put in context: <strong>90.43 Dice is competitive with models several hundred times larger</strong>, at a size that fits comfortably in a microcontroller's memory and a speed that handles live video. If it holds, that is a genuinely useful result rather than an incremental one.</p>
+
+        <div class="note n-warn">
+          <div class="lab">The catch</div>
+          <p><strong>No source code was released with the paper.</strong> Every number above rests on a textual description of the architecture. Some details — the exact channel width of each of the five stages, the number of graph nodes N, the precise fusion arithmetic — are not fully pinned down in the text, and reasonable readings of the same sentences produce models of quite different sizes. Until someone rebuilds it from that description and measures what comes out, the 0.026M claim is unverified rather than wrong.</p>
+        </div>
+
+        <p id="companion">That is exactly what our group set out to do.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== 9. JARGON ============================== -->
+  <section id="jargon">
+    <div class="railed">
+      <div>
+        <p class="kicker">Reference</p>
+        <p class="rail-note">Everything on this page that sounds like it needs a decoder ring.</p>
+      </div>
+      <div class="col">
+        <h2>Jargon decoder</h2>
+        <p>Terms in the order you are likely to meet them, not alphabetically.</p>
+      </div>
+    </div>
+
+    <dl class="gloss" style="margin-left:auto;margin-right:auto;">
+      <div class="gterm"><dt>Parameter</dt><dd>One number the network learns during training. “0.026M parameters” means 26,000 such numbers. It is the standard proxy for model size, memory footprint and overfitting risk.</dd></div>
+      <div class="gterm"><dt>GFLOPs</dt><dd>Billions of floating-point operations to process one image. Parameters measure how much the model <em>stores</em>; GFLOPs measure how much it <em>does</em>. A model can be small but slow, or large but fast, so both get reported.</dd></div>
+      <div class="gterm"><dt>Channel</dt><dd>One “layer” of a feature map. An RGB image has 3 channels; deep inside the network a stage might have 16, each holding a different learned property of every position. <span class="pill local">local</span> <span class="pill global">global</span></dd></div>
+      <div class="gterm"><dt>Kernel</dt><dd>The small grid of weights a convolution slides over the image. A 5×5 kernel looks at 25 pixels at a time.</dd></div>
+      <div class="gterm"><dt>Gabor function</dt><dd>A striped wave fading out under a Gaussian bell. It is the standard mathematical model of what a V1 simple cell in visual cortex responds to, from Jones &amp; Palmer's 1987 measurements — and, independently, what CNNs learn in their first layer anyway.</dd></div>
+      <div class="gterm"><dt>Weight sharing</dt><dd>Reusing the same learned numbers in many places instead of storing a separate copy per place. The single biggest lever on parameter count in this paper. <span class="pill local">local</span></dd></div>
+      <div class="gterm"><dt>Depthwise convolution</dt><dd>A convolution applied to each channel separately rather than mixing channels. Much cheaper than a normal convolution; usually paired with a 1×1 “pointwise” convolution that does the mixing afterwards.</dd></div>
+      <div class="gterm"><dt>State space model (SSM)</dt><dd>A sequence model that walks along the data carrying a fixed-size running summary. Cost grows linearly with length, unlike attention's quadratic growth. <span class="pill global">global</span></dd></div>
+      <div class="gterm"><dt>Mamba / selective scan</dt><dd>The specific modern SSM used here. “Selective” means the model decides what to keep and what to forget based on the current input rather than applying one fixed rule. Ships as a CUDA-compiled library, which matters a great deal in practice. <span class="pill global">global</span></dd></div>
+      <div class="gterm"><dt>Hilbert curve</dt><dd>A path that visits every cell of a grid such that every consecutive step lands on a touching cell — so flattening an image along it preserves spatial neighbourhood far better than reading row by row. <span class="pill global">global</span></dd></div>
+      <div class="gterm"><dt>Skip connection</dt><dd>A shortcut carrying high-resolution features from the encoder straight across to the decoder, bypassing the compressed middle. Without them, U-shaped networks produce blurry blobs instead of sharp boundaries.</dd></div>
+      <div class="gterm"><dt>Graph convolution (GCN)</dt><dd>Instead of neighbouring pixels, information is exchanged between <em>nodes</em> connected by a learned adjacency matrix — so relationships can jump across the image in one step regardless of distance.</dd></div>
+      <div class="gterm"><dt>Sigmoid</dt><dd>A function squashing any number into the range 0–1. Used twice here: to turn the Global Pathway's output into a gate, and to turn the final layer's output into per-pixel lesion probabilities.</dd></div>
+      <div class="gterm"><dt>Epoch</dt><dd>One complete pass of the training set through the network. Fifty epochs means the model saw every training image fifty times.</dd></div>
+      <div class="gterm"><dt>Ablation study</dt><dd>Removing one component at a time and remeasuring, to prove each part actually earns its place rather than riding along.</dd></div>
+    </dl>
+  </section>
+</div>
+
+<footer>
+  <div class="frame">
+    <a class="next" href="https://claude.ai/code/artifact/05507db7-7d82-4f6f-bf30-0304a9340896" id="companion-link">
+      <span class="l">Companion document</span>
+      <span class="t">Rebuilding BVI-Net</span>
+      <span class="d">What happened when our group implemented all of this from scratch in PyTorch, hunted the parameter count down from 777,584 to 27,312, and measured how close the paper's claims really are.</span>
+    </a>
+    <p class="colophon">
+      Written as a study companion for <strong>22AIE437 Medical Image Processing</strong>, Group 19 — Bavesh Raam S, Ghanasree S, Neha Jacob, Prem Kumar R · Amrita School of Artificial Intelligence, Amrita Vishwa Vidyapeetham.<br>
+      Figures on this page are drawn from the project's own code: the Gabor kernels come from <code>models/gabor_conv.py</code> and the scan paths from <code>models/fa_vssm.py</code>.
+    </p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+  function el(n, a){ var e = document.createElementNS(NS, n); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  function txt(x, y, s, a){ var t = el("text", a || {}); t.setAttribute("x", x); t.setAttribute("y", y); t.textContent = s; return t; }
+
+  /* ---------- 1. Model-size dot plot (log scale) ---------- */
+  (function(){
+    var g = document.getElementById("sizegrid"), r = document.getElementById("sizerows");
+    if (!g) return;
+    var data = [
+      {n:"VM-UNet",            v:44300000, hi:false},
+      {n:"U-Net",              v:13400000, hi:false},
+      {n:"MALUNet",            v:  178000, hi:false},
+      {n:"EGE-UNet",           v:   53000, hi:false},
+      {n:"UltraLight VM-UNet", v:   49000, hi:false},
+      {n:"BVI-Net",            v:   26000, hi:true}
+    ];
+    var L = 160, R = 800, T = 26, rowH = 34;
+    var lo = Math.log10(10000), hi = Math.log10(100000000);
+    function X(v){ return L + (Math.log10(v) - lo) / (hi - lo) * (R - L); }
+
+    var ticks = [[10000,"10 K"],[100000,"100 K"],[1000000,"1 M"],[10000000,"10 M"],[100000000,"100 M"]];
+    ticks.forEach(function(t){
+      var x = X(t[0]);
+      g.appendChild(el("line", {x1:x, y1:T-8, x2:x, y2:T + data.length*rowH - 12, "class":"grid-line"}));
+      g.appendChild(txt(x, T + data.length*rowH + 8, t[1], {"font-size":"11.5","text-anchor":"middle","fill":"var(--ink-3)"}));
+    });
+
+    data.forEach(function(d, i){
+      var y = T + i*rowH + 6, x = X(d.v);
+      var col = d.hi ? "var(--local)" : "var(--global)";
+      r.appendChild(txt(L - 14, y + 4, d.n, {
+        "font-size":"13","text-anchor":"end",
+        "fill": d.hi ? "var(--local-ink)" : "var(--ink)",
+        "font-weight": d.hi ? "660" : "500"
+      }));
+      r.appendChild(el("line", {x1:L, y1:y, x2:x - 8, y2:y, "class":"dot-rule"}));
+      r.appendChild(el("circle", {cx:x, cy:y, r: d.hi ? 7 : 5.5, fill:col,
+        stroke:"var(--surface)", "stroke-width":"2"}));
+      var lbl = d.v >= 1000000 ? (d.v/1000000).toFixed(d.v >= 10000000 ? 1 : 1) + " M"
+                               : (d.v/1000).toFixed(0) + " K";
+      r.appendChild(txt(x + 15, y + 4, lbl, {
+        "font-size":"12.5","font-weight": d.hi ? "660" : "500",
+        "fill": d.hi ? "var(--local-ink)" : "var(--ink-2)","font-variant-numeric":"tabular-nums"
+      }));
+    });
+    r.appendChild(txt(X(26000) + 15, T + 5*rowH + 24, "1,704× smaller than VM-UNet", {
+      "font-size":"11.5","fill":"var(--local-ink)","font-style":"italic"
+    }));
+  })();
+
+  /* ---------- 2. Gabor kernel plates ---------- */
+  (function(){
+    var g = document.getElementById("gabor"); if (!g) return;
+    var K = {
+      "0°":   [["#3b3b3b","#7f7f7f","#f0f0f0","#7f7f7f","#3b3b3b"],["#353535","#7f7f7f","#fbfbfb","#7f7f7f","#353535"],["#323232","#7f7f7f","#ffffff","#7f7f7f","#323232"],["#353535","#7f7f7f","#fbfbfb","#7f7f7f","#353535"],["#3b3b3b","#7f7f7f","#f0f0f0","#7f7f7f","#3b3b3b"]],
+      "45°":  [["#737373","#393939","#474747","#aeaeae","#e3e3e3"],["#393939","#434343","#b4b4b4","#f7f7f7","#aeaeae"],["#474747","#b4b4b4","#ffffff","#b4b4b4","#474747"],["#aeaeae","#f7f7f7","#b4b4b4","#434343","#393939"],["#e3e3e3","#aeaeae","#474747","#393939","#737373"]],
+      "90°":  [["#3b3b3b","#353535","#323232","#353535","#3b3b3b"],["#7f7f7f","#7f7f7f","#7f7f7f","#7f7f7f","#7f7f7f"],["#f0f0f0","#fbfbfb","#ffffff","#fbfbfb","#f0f0f0"],["#7f7f7f","#7f7f7f","#7f7f7f","#7f7f7f","#7f7f7f"],["#3b3b3b","#353535","#323232","#353535","#3b3b3b"]],
+      "135°": [["#e3e3e3","#aeaeae","#474747","#393939","#737373"],["#aeaeae","#f7f7f7","#b4b4b4","#434343","#393939"],["#474747","#b4b4b4","#ffffff","#b4b4b4","#474747"],["#393939","#434343","#b4b4b4","#f7f7f7","#aeaeae"],["#737373","#393939","#474747","#aeaeae","#e3e3e3"]]
+    };
+    var finds = {"0°":"vertical edges","45°":"diagonal ↗","90°":"horizontal edges","135°":"diagonal ↘"};
+    var cell = 17, pad = 168, x0 = 46;
+    Object.keys(K).forEach(function(name, i){
+      var ox = x0 + i*pad, oy = 34;
+      K[name].forEach(function(row, r){
+        row.forEach(function(c, q){
+          g.appendChild(el("rect", {x: ox + q*cell, y: oy + r*cell, width: cell - 1, height: cell - 1, fill: c, rx:1}));
+        });
+      });
+      g.appendChild(el("rect", {x: ox - 1, y: oy - 1, width: 5*cell + 1, height: 5*cell + 1,
+        fill:"none", stroke:"currentColor", "stroke-width":"1", "stroke-opacity":".28", rx:2}));
+      g.appendChild(txt(ox + 2.5*cell, oy - 12, name, {"font-size":"13","font-weight":"660","text-anchor":"middle","fill":"currentColor"}));
+      g.appendChild(txt(ox + 2.5*cell, oy + 5*cell + 20, finds[name], {"font-size":"11","text-anchor":"middle","fill":"currentColor","fill-opacity":".62"}));
+    });
+    g.appendChild(txt(14, 18, "SHARED KERNELS · 5×5 · 100 PARAMETERS TOTAL FOR ALL FOUR", {
+      "font-size":"10.5","font-weight":"700","letter-spacing":"1.2","fill":"currentColor","fill-opacity":".5"}));
+  })();
+
+  /* ---------- 3. Scan-order paths ---------- */
+  (function(){
+    var g = document.getElementById("scans"); if (!g) return;
+    var P = {
+      "Line": "7,7 21,7 35,7 49,7 63,7 77,7 91,7 105,7 7,21 21,21 35,21 49,21 63,21 77,21 91,21 105,21 7,35 21,35 35,35 49,35 63,35 77,35 91,35 105,35 7,49 21,49 35,49 49,49 63,49 77,49 91,49 105,49 7,63 21,63 35,63 49,63 63,63 77,63 91,63 105,63 7,77 21,77 35,77 49,77 63,77 77,77 91,77 105,77 7,91 21,91 35,91 49,91 63,91 77,91 91,91 105,91 7,105 21,105 35,105 49,105 63,105 77,105 91,105 105,105",
+      "Column": "7,7 7,21 7,35 7,49 7,63 7,77 7,91 7,105 21,7 21,21 21,35 21,49 21,63 21,77 21,91 21,105 35,7 35,21 35,35 35,49 35,63 35,77 35,91 35,105 49,7 49,21 49,35 49,49 49,63 49,77 49,91 49,105 63,7 63,21 63,35 63,49 63,63 63,77 63,91 63,105 77,7 77,21 77,35 77,49 77,63 77,77 77,91 77,105 91,7 91,21 91,35 91,49 91,63 91,77 91,91 91,105 105,7 105,21 105,35 105,49 105,63 105,77 105,91 105,105",
+      "Z-curve": "7,7 21,7 7,21 21,21 35,7 49,7 35,21 49,21 7,35 21,35 7,49 21,49 35,35 49,35 35,49 49,49 63,7 77,7 63,21 77,21 91,7 105,7 91,21 105,21 63,35 77,35 63,49 77,49 91,35 105,35 91,49 105,49 7,63 21,63 7,77 21,77 35,63 49,63 35,77 49,77 7,91 21,91 7,105 21,105 35,91 49,91 35,105 49,105 63,63 77,63 63,77 77,77 91,63 105,63 91,77 105,77 63,91 77,91 63,105 77,105 91,91 105,91 91,105 105,105",
+      "Hilbert": "7,7 7,21 21,21 21,7 35,7 49,7 49,21 35,21 35,35 49,35 49,49 35,49 21,49 21,35 7,35 7,49 7,63 21,63 21,77 7,77 7,91 7,105 21,105 21,91 35,91 35,105 49,105 49,91 49,77 35,77 35,63 49,63 63,63 77,63 77,77 63,77 63,91 63,105 77,105 77,91 91,91 91,105 105,105 105,91 105,77 91,77 91,63 105,63 105,49 105,35 91,35 91,49 77,49 63,49 63,35 77,35 77,21 63,21 63,7 77,7 91,7 91,21 105,21 105,7"
+    };
+    var notes = {
+      "Line":"row by row","Column":"column by column",
+      "Z-curve":"2×2 blocks, recursively","Hilbert":"never leaves a neighbour"
+    };
+    var x0 = 30, pad = 172, oy = 34;
+    Object.keys(P).forEach(function(name, i){
+      var ox = x0 + i*pad;
+      var grp = el("g", {transform:"translate(" + ox + "," + oy + ")"});
+      for (var r = 0; r < 8; r++) for (var c = 0; c < 8; c++)
+        grp.appendChild(el("rect", {x:c*14 + 1, y:r*14 + 1, width:12, height:12, rx:1.5,
+          fill:"currentColor", "fill-opacity":".055"}));
+      grp.appendChild(el("polyline", {points:P[name], fill:"none", stroke:"#2A78D6",
+        "stroke-width":"1.7", "stroke-linejoin":"round", "stroke-linecap":"round",
+        "stroke-opacity":".9", "marker-end":"url(#sh)"}));
+      grp.appendChild(el("circle", {cx:7, cy:7, r:3.4, fill:"#EB6834"}));
+      g.appendChild(grp);
+      g.appendChild(txt(ox + 56, oy - 12, name, {"font-size":"13","font-weight":"650","text-anchor":"middle","fill":"currentColor"}));
+      g.appendChild(txt(ox + 56, oy + 128, notes[name], {"font-size":"11","text-anchor":"middle","fill":"var(--ink-3)"}));
+    });
+    g.appendChild(txt(30, 18, "START", {"font-size":"9.5","font-weight":"700","letter-spacing":"1","fill":"var(--local-ink)"}));
+    g.appendChild(el("circle", {cx:72, cy:14.5, r:3.4, fill:"#EB6834"}));
+  })();
+
+  /* ---------- 4. GCN pixel grids ---------- */
+  (function(){
+    ["pixgrid","pixgrid2"].forEach(function(id, k){
+      var g = document.getElementById(id); if (!g) return;
+      var ox = k === 0 ? 30 : 636, oy = 44;
+      for (var r = 0; r < 6; r++) for (var c = 0; c < 6; c++) {
+        var lesion = (r >= 1 && r <= 3 && c >= 2 && c <= 4);
+        g.appendChild(el("rect", {x:ox + c*12, y:oy + r*12, width:10.5, height:10.5, rx:1.5,
+          fill: lesion ? "#EB6834" : "currentColor",
+          "fill-opacity": lesion ? (k === 0 ? ".35" : ".6") : ".08"}));
+      }
+    });
+  })();
+
+  /* ---------- 5. Full architecture U ---------- */
+  (function(){
+    var enc = document.getElementById("uenc"), dec = document.getElementById("udec"),
+        sk  = document.getElementById("uskip"), bot = document.getElementById("bottom");
+    if (!enc) return;
+    var stages = ["E1 · V1/V2","E2 · V1/V2","E3 · V4","E4 · V4","E5 · V4"];
+    var EX = 356, DX = 664, W = 132, H = 30, gap = 40, TOP = 40;
+
+    stages.forEach(function(s, i){
+      var y = TOP + i*gap;
+      enc.appendChild(el("rect", {x:EX, y:y, width:W, height:H, rx:5,
+        fill:"#EB6834", "fill-opacity":".13", stroke:"#EB6834", "stroke-width":"1.2"}));
+      enc.appendChild(txt(EX + W/2, y + 19.5, s, {"font-size":"11.5","text-anchor":"middle","fill":"currentColor","font-weight":"550"}));
+      if (i < 4) enc.appendChild(el("line", {x1:EX + W/2, y1:y + H, x2:EX + W/2, y2:y + gap,
+        stroke:"currentColor", "stroke-width":"1.2", "stroke-opacity":".5", "marker-end":"url(#a3)"}));
+
+      var dy = TOP + (4 - i)*gap;
+      dec.appendChild(el("rect", {x:DX, y:dy, width:W, height:H, rx:5,
+        fill:"currentColor", "fill-opacity":".06", stroke:"currentColor", "stroke-width":"1.2", "stroke-opacity":".5"}));
+      dec.appendChild(txt(DX + W/2, dy + 19.5, "D" + (5 - i) + " · upsample", {"font-size":"11.5","text-anchor":"middle","fill":"currentColor","font-weight":"550"}));
+      if (i < 4) dec.appendChild(el("line", {x1:DX + W/2, y1:dy, x2:DX + W/2, y2:dy - gap + H,
+        stroke:"currentColor", "stroke-width":"1.2", "stroke-opacity":".5", "marker-end":"url(#a3)"}));
+
+      var my = y + H/2;
+      sk.appendChild(el("line", {x1:EX + W, y1:my, x2:EX + W + 30, y2:my,
+        stroke:"#2A78D6", "stroke-width":"1.3", "stroke-opacity":".8"}));
+      sk.appendChild(el("rect", {x:EX + W + 30, y:my - 10, width:74, height:20, rx:4,
+        fill:"#2A78D6", "fill-opacity":".14", stroke:"#2A78D6", "stroke-width":"1.1"}));
+      sk.appendChild(txt(EX + W + 67, my + 4, "GCN attn", {"font-size":"10","text-anchor":"middle","fill":"#2A78D6","font-weight":"620"}));
+      sk.appendChild(el("path", {d:"M" + (EX + W + 104) + "," + my + " L" + (DX - 14) + "," + my + " L" + (DX - 14) + "," + (TOP + (4 - i)*gap + H/2) + " L" + DX + "," + (TOP + (4 - i)*gap + H/2),
+        fill:"none", stroke:"#2A78D6", "stroke-width":"1.3", "stroke-opacity":".55", "marker-end":"url(#a3)", style:"color:#2A78D6"}));
+    });
+
+    bot.appendChild(el("line", {x1:EX + W/2, y1:TOP + 4*gap + H, x2:EX + W/2, y2:TOP + 4*gap + H + 22,
+      stroke:"currentColor", "stroke-width":"1.2", "stroke-opacity":".5"}));
+    bot.appendChild(el("path", {d:"M" + (EX + W/2) + "," + (TOP + 4*gap + H + 22) + " L" + (DX + W/2) + "," + (TOP + 4*gap + H + 22) + " L" + (DX + W/2) + "," + (TOP + 4*gap + H),
+      fill:"none", stroke:"currentColor", "stroke-width":"1.2", "stroke-opacity":".5", "marker-end":"url(#a3)"}));
+    bot.appendChild(txt((EX + DX + W)/2, TOP + 4*gap + H + 38, "bottleneck", {"font-size":"11","text-anchor":"middle","fill":"var(--ink-3)"}));
+
+    bot.appendChild(el("line", {x1:DX + W/2, y1:TOP, x2:DX + W/2, y2:TOP - 22,
+      stroke:"currentColor", "stroke-width":"1.3", "stroke-opacity":".6", "marker-end":"url(#a3)"}));
+    bot.appendChild(el("rect", {x:DX + 6, y:TOP - 52, width:W - 12, height:28, rx:5,
+      fill:"var(--surface-3)", stroke:"currentColor", "stroke-width":"1.2", "stroke-opacity":".55"}));
+    bot.appendChild(txt(DX + W/2, TOP - 33, "1×1 conv → sigmoid", {"font-size":"11","text-anchor":"middle","fill":"currentColor"}));
+    bot.appendChild(txt(DX + W/2, TOP - 60, "MASK", {"font-size":"10","text-anchor":"middle","fill":"var(--ink-3)","font-weight":"700","letter-spacing":"1.2"}));
+    bot.appendChild(txt(EX + W/2, TOP - 12, "input image", {"font-size":"11","text-anchor":"middle","fill":"var(--ink-3)"}));
+  })();
+})();
+</script>
