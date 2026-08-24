@@ -9,6 +9,9 @@ scikit-learn
 tqdm
 matplotlib
 albumentations
+nibabel  # loads LiTS17/BraTS19 .nii/.nii.gz volumes (data/prepare_lits.py, data/prepare_brats.py)
+fastapi  # backend/app.py real /predict inference API
+uvicorn  # serves backend/app.py
 
 # Optional: real selective-scan Mamba backend for the Global Pathway.
 # Requires Linux + CUDA toolkit (nvcc) matching the torch build above --

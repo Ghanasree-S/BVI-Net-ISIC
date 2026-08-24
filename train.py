@@ -9,9 +9,9 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from dataset import ISICDataset
+from dataset import DATASETS
 from losses import BCEDiceLoss
-from metrics import dice_score
+from metrics import dice_score, per_class_metrics
 from models import BVINet
 from transforms import get_train_augment
 
@@ -56,8 +56,15 @@ def main():
     pipeline, and runs the full training loop with early stopping.
 
     Command-line hyperparameters:
+        --dataset (str, default="isic"): which organ dataset to train on --
+            "isic" (skin, RGB, 1-class), "lits" (liver, grayscale CT,
+            2-class Liver+Tumor), or "brats" (brain, 4-channel MRI,
+            3-class WT/TC/ET). Selects the Dataset class and the model's
+            in_channels/num_classes automatically via the DATASETS registry
+            -- no need to pass --channels/--in_channels separately.
         --data_dir (str, default="data/isic2018a"): path to the prepared
-            dataset (output of data/prepare_isic_a.py).
+            dataset (output of data/prepare_isic_a.py, prepare_lits.py, or
+            prepare_brats.py, matching --dataset).
         --epochs (int, default=50): maximum training epochs -- matches the
             paper's protocol; early stopping may end training sooner.
         --batch_size (int, default=64): samples per gradient step. Paper
@@ -78,6 +85,7 @@ def main():
             models/gcn_attention.py) -- second lever on parameter count.
     """
     ap = argparse.ArgumentParser()
+    ap.add_argument("--dataset", choices=list(DATASETS), default="isic")
     ap.add_argument("--data_dir", default="data/isic2018a")
     ap.add_argument("--epochs", type=int, default=50)
     ap.add_argument("--batch_size", type=int, default=64)
@@ -93,12 +101,19 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    train_ds = ISICDataset(args.data_dir, split="train", augment=get_train_augment())
-    val_ds = ISICDataset(args.data_dir, split="val")  # no augmentation for honest evaluation
+    organ = DATASETS[args.dataset]
+    DatasetClass = organ["cls"]
+    train_ds = DatasetClass(args.data_dir, split="train", augment=get_train_augment())
+    val_ds = DatasetClass(args.data_dir, split="val")  # no augmentation for honest evaluation
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
 
-    model = BVINet(channels=args.channels, gcn_nodes=args.gcn_nodes).to(device)
+    model = BVINet(
+        in_channels=organ["in_channels"],
+        num_classes=organ["num_classes"],
+        channels=args.channels,
+        gcn_nodes=args.gcn_nodes,
+    ).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} ({n_params / 1e6:.4f}M)")
 
@@ -133,6 +148,27 @@ def main():
                 break
 
     print(f"Training done. Best val_dice = {best_dice:.4f}")
+
+    if organ["num_classes"] > 1:
+        # Per-class breakdown (paper Table VI/VII: Liver+Tumor or WT/TC/ET reported
+        # separately, not pooled) using the best checkpoint just saved.
+        model.load_state_dict(torch.load(out_dir / "best.pt", map_location=device))
+        model.eval()
+        totals = {name: {} for name in organ["class_names"]}
+        counts = {name: 0 for name in organ["class_names"]}
+        with torch.no_grad():
+            for img, mask in val_loader:
+                img, mask = img.to(device), mask.to(device)
+                pred = model(img)
+                per_class = per_class_metrics(pred, mask, organ["class_names"])
+                for name, m in per_class.items():
+                    for k, v in m.items():
+                        totals[name][k] = totals[name].get(k, 0.0) + v * img.size(0)
+                    counts[name] += img.size(0)
+        print("Per-class validation metrics (best checkpoint):")
+        for name in organ["class_names"]:
+            avg = {k: v / counts[name] for k, v in totals[name].items()}
+            print(f"  {name}: " + " ".join(f"{k}={v:.4f}" for k, v in avg.items()))
 
 
 if __name__ == "__main__":
