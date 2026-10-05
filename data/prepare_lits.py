@@ -82,7 +82,8 @@ def find_volume_pairs(raw_dir):
     return pairs
 
 
-def save_volume_slices(vol_id, vol_path, seg_path, out_dir, split, min_label_fraction=0.0):
+def save_volume_slices(vol_id, vol_path, seg_path, out_dir, split, min_label_fraction=0.0,
+                       slice_stride=1):
     """Loads one CT volume + its segmentation, slices both into 2D axial
     slices, discards unlabeled slices, and writes the labeled ones out.
 
@@ -101,6 +102,12 @@ def save_volume_slices(vol_id, vol_path, seg_path, out_dir, split, min_label_fra
             at least this fraction of pixels are labeled liver or tumor;
             0.0 keeps every slice with a nonzero label pixel (paper's
             "labeled slices only" filter), raise it to be stricter.
+        slice_stride (int, default=1): keep only every Nth labeled slice
+            (z % slice_stride == 0). Neighbouring axial slices are nearly
+            identical, so a stride of ~8 loses little information while
+            cutting training time ~8x -- needed to fit a 448x448 real-Mamba
+            run inside a Kaggle session (the full ~19K-slice set would take
+            days per run).
 
     Returns:
         int: number of slices written for this volume.
@@ -110,7 +117,7 @@ def save_volume_slices(vol_id, vol_path, seg_path, out_dir, split, min_label_fra
     n_slices = vol.shape[2]
     written = 0
 
-    for z in range(n_slices):
+    for z in range(0, n_slices, slice_stride):
         seg_slice = seg[:, :, z]
         liver_mask = (seg_slice >= 1).astype(np.uint8)  # label 1 or 2
         tumor_mask = (seg_slice == 2).astype(np.uint8)  # label 2 only
@@ -152,6 +159,9 @@ def main():
         --min_label_fraction (float, default=0.0): forwarded to
             save_volume_slices -- minimum fraction of liver-labeled pixels
             required to keep a slice.
+        --slice_stride (int, default=8): keep every Nth labeled slice, see
+            save_volume_slices. Use 1 to keep every labeled slice (full
+            paper-scale dataset, impractically slow to train on Kaggle).
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw_dir", default=str(Path(__file__).parent / "lits17_raw"))
@@ -160,6 +170,7 @@ def main():
     ap.add_argument("--splits", type=float, nargs=3, default=(0.7, 0.1, 0.2),
                      help="train/val/test fractions, applied at the volume level")
     ap.add_argument("--min_label_fraction", type=float, default=0.0)
+    ap.add_argument("--slice_stride", type=int, default=8)
     args = ap.parse_args()
 
     pairs = find_volume_pairs(args.raw_dir)
@@ -185,7 +196,7 @@ def main():
     total_written = 0
     for split, (vol_id, vol_path, seg_path) in tqdm(split_assignment, desc="slicing volumes"):
         total_written += save_volume_slices(
-            vol_id, vol_path, seg_path, out, split, args.min_label_fraction
+            vol_id, vol_path, seg_path, out, split, args.min_label_fraction, args.slice_stride
         )
 
     print(f"Done. {total_written} labeled slices written to: {out}")

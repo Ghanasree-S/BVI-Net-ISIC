@@ -27,10 +27,14 @@ class DiceLoss(nn.Module):
             torch.Tensor (scalar): mean Dice loss over the batch (0 = perfect
             overlap, 1 = no overlap).
         """
-        pred = pred.flatten(1)
-        target = target.flatten(1)
-        intersection = (pred * target).sum(dim=1)
-        union = pred.sum(dim=1) + target.sum(dim=1)
+        # Dice is computed per sample AND per output channel, then averaged, so
+        # small classes (liver TUMOR, brain ET) weigh as much as large ones
+        # (liver, WT) instead of being swamped by them. For the single-channel
+        # skin model this is identical to a plain per-sample Dice.
+        pred = pred.flatten(2)      # (B, C, H*W)
+        target = target.flatten(2)
+        intersection = (pred * target).sum(dim=2)
+        union = pred.sum(dim=2) + target.sum(dim=2)
         dice = (2 * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice.mean()
 

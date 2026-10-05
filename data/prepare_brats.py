@@ -112,7 +112,7 @@ def load_case(case_dir):
     return stacked, seg
 
 
-def save_case_slices(case_id, stacked, seg, out_dir, split):
+def save_case_slices(case_id, stacked, seg, out_dir, split, slice_stride=1):
     """Slices one case's stacked 4-modality volume + segmentation into 2D
     axial slices, discards tumor-free slices, and writes labeled ones out.
 
@@ -125,6 +125,10 @@ def save_case_slices(case_id, stacked, seg, out_dir, split):
             train/val/test subfolders).
         split (str): which split folder to write into -- determined at the
             case level so all slices from one patient share a split.
+        slice_stride (int, default=1): keep only every Nth axial slice
+            (z % slice_stride == 0) before the tumor-free filter -- adjacent
+            slices are nearly identical, so this cuts training time ~Nx at
+            little cost in information.
 
     Returns:
         int: number of slices written for this case.
@@ -132,7 +136,7 @@ def save_case_slices(case_id, stacked, seg, out_dir, split):
     n_slices = stacked.shape[2]
     written = 0
 
-    for z in range(n_slices):
+    for z in range(0, n_slices, slice_stride):
         seg_slice = seg[:, :, z]
         wt = (seg_slice > 0).astype(np.uint8)                       # 1 + 2 + 4
         tc = np.isin(seg_slice, [1, 4]).astype(np.uint8)            # 1 + 4
@@ -176,6 +180,8 @@ def main():
             the paper's stated 7:1:2 protocol.
         --lgg_only (bool, default=True): restrict to the 76 LGG cases, per
             the paper's stated scope; pass --no-lgg_only to include HGG too.
+        --slice_stride (int, default=2): keep every Nth axial slice, see
+            save_case_slices. Use 1 for every tumor-bearing slice.
     """
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw_dir", default=str(Path(__file__).parent / "brats19_raw"))
@@ -184,6 +190,7 @@ def main():
     ap.add_argument("--splits", type=float, nargs=3, default=(0.7, 0.1, 0.2),
                      help="train/val/test fractions, applied at the case level")
     ap.add_argument("--lgg_only", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--slice_stride", type=int, default=2)
     args = ap.parse_args()
 
     case_dirs = find_case_dirs(args.raw_dir, lgg_only=args.lgg_only)
@@ -210,7 +217,7 @@ def main():
     total_written = 0
     for split, case_dir in tqdm(split_assignment, desc="slicing cases"):
         stacked, seg = load_case(case_dir)
-        total_written += save_case_slices(case_dir.name, stacked, seg, out, split)
+        total_written += save_case_slices(case_dir.name, stacked, seg, out, split, args.slice_stride)
 
     print(f"Done. {total_written} labeled slices written to: {out}")
 
