@@ -13,8 +13,11 @@ the two remaining tasks from the base paper, plus the frontend.
       across all volumes. Add via Kaggle "+ Add Input" like the ISIC dataset.
       **Blocked on manual download — needs a Kaggle session, not doable from here.**
 - [x] **3D → 2D slicing script** (`data/prepare_lits.py`): loads `.nii`/`.nii.gz`
-      volumes via `nibabel`, slices into 2D axial images. Written, untested
-      against real data (no dataset downloaded yet).
+      volumes via `nibabel`, slices into 2D axial images. Dry-run verified on
+      synthetic nested-folder volumes (finds files recursively, volume-level
+      split, labeled slices only); not yet run on the real Kaggle data.
+      `--slice_stride` (default 8; notebook uses 10) keeps every Nth slice so a
+      448x448 real-Mamba run fits a Kaggle session.
 - [x] **CT windowing / HU normalization:** liver window [-100, 400] HU clip
       → normalize to [0,1], implemented in `hu_to_uint8()`.
 - [x] **Filter to labeled slices only:** `save_volume_slices()` discards
@@ -34,12 +37,14 @@ the two remaining tasks from the base paper, plus the frontend.
 
 ## 2. Brain — BraTS19
 
-- [ ] **Source the dataset.** Official access requires CBICA/Synapse
-      registration (data use agreement) — start this early, approval can
-      take time. **This is a manual human approval step, not automatable.**
+- [x] **Source the dataset.** Public Kaggle BraTS 2019 mirrors exist, no
+      registration wait: `aryashah2k/brain-tumor-segmentation-brats-2019`
+      (or `walidrehamnia/brain-tumor-segmentation-brats-2019-train-valid`).
+      Attach one via "+ Add Input" and confirm it has HGG/ + LGG/ case folders.
 - [x] **Multi-modal 3D → 2D slicing** (`data/prepare_brats.py`): stacks
       T1/T1ce/T2/FLAIR as 4 input channels, z-score normalizes each
-      modality. Written, untested against real data (no dataset yet).
+      modality. Dry-run verified on synthetic cases (LGG-only filter, case-level
+      split); not yet run on the real mirror. `--slice_stride` default 2.
 - [x] **Three nested labels:** WT/TC/ET masks written separately;
       `BraTSDataset` stacks them as (3, H, W) for `BVINet(num_classes=3)`.
 - [x] **Use only LGG cases**: `find_case_dirs(..., lgg_only=True)` is the
@@ -49,6 +54,21 @@ the two remaining tasks from the base paper, plus the frontend.
       `BraTSDataset`, `in_channels=4`, `num_classes=3`, and prints the
       WT/TC/ET per-class breakdown. **Still needs the approved dataset and
       a GPU training session to actually run.**
+
+## 2b. Pre-flight fixes found by the synthetic dry-run (done)
+
+- [x] BraTS training would have crashed on ~30% of samples: `HueSaturationValue`
+      augmentation rejects 4-channel MRI. `get_train_augment(in_channels)` now
+      adds it for RGB only.
+- [x] Dice loss pooled all output channels, so the tiny Tumor / ET classes were
+      swamped by Liver / WT. Now per-channel Dice averaged (identical for the
+      1-channel skin model -- verified numerically).
+- [x] Early-stopping / checkpoint metric is now the per-class mean Dice
+      (`metrics.mean_class_dice`, identical to `dice_score` for skin).
+- [x] `train.py` prints per-epoch time, to budget Kaggle's 12 h session limit.
+- [x] `notebooks/kaggle-multi-organ.ipynb`: per-organ `--out_dir`, liver batch
+      size 4 (448x448 memory), real BraTS mirror named, recursive dataset
+      discovery, official-val skin reproduction.
 
 ## 3. Frontend
 

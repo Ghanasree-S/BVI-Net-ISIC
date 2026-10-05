@@ -4,8 +4,19 @@ Applied only to the train split -- val/test stay unaugmented for honest evaluati
 import albumentations as A
 
 
-def get_train_augment():
+def get_train_augment(in_channels=3):
     """Builds the training-only augmentation pipeline.
+
+    Parameters:
+        in_channels (int, default=3): number of image channels of the organ
+            being trained (3 = RGB skin, 1 = grayscale CT liver, 4 = stacked
+            MRI brain). Only the color-space jitter (HueSaturationValue)
+            depends on this -- it is only meaningful for real RGB images and
+            raises an error on 4-channel input, so it is added for
+            in_channels == 3 only. All geometric transforms and the
+            brightness/contrast jitter work for any channel count, and
+            masks may carry extra channels (liver+tumor, WT/TC/ET) -- they
+            receive the identical geometric transform as the image.
 
     Hyperparameters (each is a probability `p` of applying that
     transform, and a `*_limit` controlling its strength):
@@ -19,21 +30,24 @@ def get_train_augment():
             variation. border_mode=0 fills new pixels with black rather than
             reflecting/wrapping the image.
         RandomBrightnessContrast (p=0.5): brightness_limit=0.2,
-            contrast_limit=0.2 -- simulates lighting variation across
-            dermoscopy devices.
-        HueSaturationValue (p=0.3): hue_shift_limit=10, sat_shift_limit=15,
-            val_shift_limit=10 -- simulates skin-tone and color-calibration
-            variation across images.
+            contrast_limit=0.2 -- simulates lighting/scanner variation.
+        HueSaturationValue (p=0.3, RGB only): hue_shift_limit=10,
+            sat_shift_limit=15, val_shift_limit=10 -- simulates skin-tone
+            and color-calibration variation across dermoscopy images.
 
     Returns:
         albumentations.Compose: callable as augment(image=..., mask=...).
     """
-    return A.Compose([
+    transforms = [
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         A.RandomRotate90(p=0.5),
         A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1, rotate_limit=20, p=0.5,
                             border_mode=0),
         A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
-        A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=15, val_shift_limit=10, p=0.3),
-    ])
+    ]
+    if in_channels == 3:
+        transforms.append(
+            A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=15, val_shift_limit=10, p=0.3)
+        )
+    return A.Compose(transforms)

@@ -3,6 +3,7 @@ AdamW, initial lr 0.001, batch size 64, 50 epochs, early stop on 5-epoch
 val-Dice plateau, combined BCE+Dice loss.
 """
 import argparse
+import time
 from pathlib import Path
 
 import torch
@@ -11,7 +12,7 @@ from tqdm import tqdm
 
 from dataset import DATASETS
 from losses import BCEDiceLoss
-from metrics import dice_score, per_class_metrics
+from metrics import mean_class_dice, per_class_metrics
 from models import BVINet
 from transforms import get_train_augment
 
@@ -46,7 +47,7 @@ def run_epoch(model, loader, criterion, optimizer, device, train=True):
             optimizer.step()
 
         total_loss += loss.item() * img.size(0)
-        total_dice += dice_score(pred.detach(), mask) * img.size(0)
+        total_dice += mean_class_dice(pred.detach(), mask) * img.size(0)
         n += img.size(0)
     return total_loss / n, total_dice / n
 
@@ -103,7 +104,8 @@ def main():
 
     organ = DATASETS[args.dataset]
     DatasetClass = organ["cls"]
-    train_ds = DatasetClass(args.data_dir, split="train", augment=get_train_augment())
+    train_ds = DatasetClass(args.data_dir, split="train",
+                            augment=get_train_augment(organ["in_channels"]))
     val_ds = DatasetClass(args.data_dir, split="val")  # no augmentation for honest evaluation
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
@@ -128,13 +130,14 @@ def main():
 
     best_dice, patience_left = 0.0, args.patience
     for epoch in range(1, args.epochs + 1):
+        epoch_start = time.time()
         train_loss, train_dice = run_epoch(model, train_loader, criterion, optimizer, device, train=True)
         val_loss, val_dice = run_epoch(model, val_loader, criterion, optimizer, device, train=False)
         scheduler.step(val_dice)
 
         current_lr = optimizer.param_groups[0]["lr"]
         print(f"Epoch {epoch:02d} | train_loss={train_loss:.4f} train_dice={train_dice:.4f} "
-              f"| val_loss={val_loss:.4f} val_dice={val_dice:.4f} | lr={current_lr:.6f}")
+              f"| val_loss={val_loss:.4f} val_dice={val_dice:.4f} | lr={current_lr:.6f} | {time.time() - epoch_start:.0f}s")
 
         if val_dice > best_dice:
             best_dice = val_dice

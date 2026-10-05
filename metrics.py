@@ -174,6 +174,23 @@ def all_metrics(pred, target):
     }
 
 
+def mean_class_dice(pred, target):
+    """Mean of the per-channel Dice scores -- the number train.py uses for
+    LR scheduling, early stopping and checkpoint selection, so multi-label
+    organs (liver+tumor, WT/TC/ET) are judged on every class equally rather
+    than on the pooled, large-class-dominated Dice. Identical to
+    dice_score() for the single-channel skin model.
+
+    Parameters:
+        pred (torch.Tensor): predicted probabilities, shape (B, C, H, W).
+        target (torch.Tensor): ground-truth binary masks, same shape.
+
+    Returns:
+        float: average Dice over the C channels, in [0, 1].
+    """
+    return float(np.mean([dice_score(pred[:, c], target[:, c]) for c in range(pred.shape[1])]))
+
+
 def per_class_metrics(pred, target, class_names):
     """Breaks down every metric per output channel, for multi-label models
     (LiTS17's Liver/Tumor, BraTS19's WT/TC/ET) where channels overlap and
