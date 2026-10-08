@@ -10,11 +10,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import os
+
 try:
     from mamba_ssm import Mamba
     HAS_MAMBA = True
 except Exception:
     HAS_MAMBA = False
+    # CPU inference of a checkpoint trained with real Mamba: use the
+    # parameter-compatible pure-PyTorch port instead of SimpleSSMBranch.
+    if os.environ.get("BVI_MAMBA_REF") == "1":
+        from .mamba_ref import Mamba
+        HAS_MAMBA = True
 
 
 def _scan_order(h, w, mode):
