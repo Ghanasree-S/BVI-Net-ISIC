@@ -40,6 +40,10 @@ export interface PredictionMetrics {
   model_size: string; // "27,312 parameters (0.11 MB)"
   parameter_count: number;
   flops_gflops: number;
+  // 'test_set': dice/iou/sensitivity/specificity are the checkpoint's held-out
+  // test scores (an uploaded image has no ground truth to score against).
+  metrics_source?: 'test_set' | 'unavailable';
+  foreground_fraction?: number;
 }
 
 export interface ModelInfo {

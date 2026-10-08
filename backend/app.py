@@ -15,8 +15,16 @@ Run with: uvicorn backend.app:app --host 0.0.0.0 --port 8000
 """
 import base64
 import io
+import json
+import os
 import time
 from pathlib import Path
+
+# Checkpoints are trained on Kaggle with the real CUDA mamba_ssm, which this
+# CPU backend doesn't have -- use the parameter-compatible pure-PyTorch port
+# (models/mamba_ref.py) so their state_dicts load. Must be set before
+# importing models.
+os.environ.setdefault("BVI_MAMBA_REF", "1")
 
 import cv2
 import numpy as np
@@ -26,8 +34,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from models import BVINet
+from models.fa_vssm import HAS_MAMBA
 
-CHECKPOINT_DIR = Path(__file__).parent.parent / "checkpoints"
+CHECKPOINT_DIR = Path(os.environ.get("BVI_CHECKPOINT_DIR", Path(__file__).parent.parent / "checkpoints"))
 
 # Per-organ model config: must match what each organ was actually trained
 # with (see train.py's DATASETS registry) -- wrong in_channels/num_classes
@@ -62,6 +71,7 @@ app.add_middleware(
 )
 
 _model_cache = {}
+_flops_cache = {}
 
 
 class PredictRequest(BaseModel):
@@ -105,10 +115,64 @@ def load_model(organ_type):
         channels=cfg["channels"],
         gcn_nodes=cfg["gcn_nodes"],
     )
+    if not HAS_MAMBA:
+        raise HTTPException(500, "Mamba backend unavailable -- cannot load a real-Mamba checkpoint")
     model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
     model.eval()
     _model_cache[organ_type] = model
+    _flops_cache[organ_type] = count_gflops(model, cfg)
     return model, cfg
+
+
+def count_gflops(model, cfg):
+    """GFLOPs of one forward pass at the organ's input size, counted by
+    torch's FlopCounterMode (convolutions + matmuls, which dominate; the
+    elementwise selective-scan ops aren't counted)."""
+    from torch.utils.flop_counter import FlopCounterMode
+    x = torch.zeros(1, cfg["in_channels"], cfg["input_size"], cfg["input_size"])
+    counter = FlopCounterMode(display=False)
+    with torch.no_grad(), counter:
+        model(x)
+    return round(counter.get_total_flops() / 1e9, 3)
+
+
+def load_test_metrics(organ_type):
+    """Reads the checkpoint's test-set metrics written by evaluate.py
+    (outputs/<organ>/metrics.json, copied next to the checkpoint as
+    bvi_net_<organ>_metrics.json).
+
+    A newly uploaded image has no ground-truth mask, so Dice/IoU/etc. can't
+    be measured for it -- the dashboard shows the model's held-out test-set
+    scores instead, flagged with metrics_source="test_set".
+
+    Returns:
+        dict or None: per-class metrics of the first class, or None if the
+        metrics file hasn't been copied in yet.
+    """
+    path = CHECKPOINT_DIR / f"bvi_net_{organ_type}_metrics.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        data = json.load(f)
+    first_class = ORGAN_CONFIG[organ_type]["class_names"][0]
+    per_class = data["per_class"]
+    return per_class.get(first_class) or next(iter(per_class.values()))
+
+
+def decode_npy(raw, size, in_channels):
+    """Decodes a .npy slice (BraTS: (H, W, 4) uint8, as written by
+    data/prepare_brats.py) into a (1, C, size, size) tensor in [0, 1]."""
+    arr = np.load(io.BytesIO(raw), allow_pickle=False)
+    if arr.ndim == 2:
+        arr = arr[:, :, None]
+    if arr.shape[-1] != in_channels:
+        raise HTTPException(400, f"Expected {in_channels} channels, got array of shape {arr.shape}")
+    arr = cv2.resize(arr.astype(np.float32), (size, size), interpolation=cv2.INTER_LINEAR)
+    if arr.ndim == 2:
+        arr = arr[:, :, None]
+    if arr.max() > 1.0:
+        arr = arr / 255.0
+    return torch.from_numpy(arr.transpose(2, 0, 1).copy()).unsqueeze(0)
 
 
 def decode_image(data_url, size, in_channels):
@@ -131,6 +195,14 @@ def decode_image(data_url, size, in_channels):
     if "," in data_url:
         data_url = data_url.split(",", 1)[1]
     raw = base64.b64decode(data_url)
+    if raw[:6] == bytes([0x93]) + b"NUMPY":  # .npy magic
+        return decode_npy(raw, size, in_channels)
+    if in_channels not in (1, 3):
+        raise HTTPException(
+            400,
+            f"This model needs a {in_channels}-channel input (T1/T1ce/T2/FLAIR) -- "
+            "upload a .npy slice from data/prepare_brats.py, not a regular image.",
+        )
     arr = np.frombuffer(raw, dtype=np.uint8)
     flag = cv2.IMREAD_COLOR if in_channels == 3 else cv2.IMREAD_GRAYSCALE
     img = cv2.imdecode(arr, flag)
@@ -200,6 +272,14 @@ def predict(req: PredictRequest):
         pred = model(img_tensor)  # (1, num_classes, H, W), sigmoid probabilities
     inference_ms = (time.time() - start) * 1000
 
+    # Confidence: mean probability the model assigns to its own decision,
+    # over the predicted region (or over the whole image if nothing is found).
+    p = pred[0, 0]
+    fg = p > 0.5
+    confidence = float(p[fg].mean()) if fg.any() else float((1 - p).mean())
+    n_params = sum(t.numel() for t in model.parameters())
+    test = load_test_metrics(organ_type) or {}
+
     channel_masks = {}
     for c, name in enumerate(cfg["class_names"]):
         mask_uint8 = (pred[0, c] > 0.5).float().mul(255).byte().numpy()
@@ -212,10 +292,21 @@ def predict(req: PredictRequest):
         "mask_base64": channel_masks[cfg["class_names"][0]],
         "masks_by_class": channel_masks,
         "metrics": {
+            "dice": test.get("dice", 0.0),
+            "iou": test.get("miou", 0.0),
+            "sensitivity": test.get("sensitivity", 0.0),
+            "specificity": test.get("specificity", 0.0),
+            "confidence": round(confidence, 4),
             "inference_time_ms": round(inference_ms, 2),
+            "model_size": f"{n_params:,} parameters ({n_params * 4 / 1e6:.2f} MB)",
+            "parameter_count": n_params,
+            "flops_gflops": _flops_cache.get(organ_type, 0.0),
+            "metrics_source": "test_set" if test else "unavailable",
+            "foreground_fraction": round(float(fg.float().mean()), 4),
         },
         "model_info": {
             "name": "BVI-Net",
+            "version": "v1.0",
             "architecture": "Gabor Local + Mamba Global + GCN Attention",
             "dataset": cfg["dataset"],
             "checkpoint": cfg["checkpoint"],
