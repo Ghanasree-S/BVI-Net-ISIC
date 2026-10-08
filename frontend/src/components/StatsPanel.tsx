@@ -42,7 +42,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ metrics, organType }) =>
               Quantitative Evaluation & Inference Metrics
             </h3>
             <p className="text-xs text-slate-500">
-              Real-time validation against ground-truth boundary definitions
+              {metrics.metrics_source === 'test_set' ? 'Dice / IoU / Sens / Spec: checkpoint scores on the held-out test set. Confidence + latency: this image.' : 'Test-set scores not loaded (add bvi_net_<organ>_metrics.json next to the checkpoint).'}
             </p>
           </div>
         </div>
@@ -62,7 +62,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ metrics, organType }) =>
           <div className="flex items-center justify-between text-slate-500 mb-1.5">
             <span className="text-xs font-bold uppercase tracking-wider text-teal-800 flex items-center gap-1.5">
               <Target className="w-3.5 h-3.5 text-teal-600" />
-              Dice Similarity Score (DSC)
+              {metrics.metrics_source === 'test_set' ? 'Model Test-Set Dice (DSC)' : 'Dice Similarity Score (DSC)'}
             </span>
           </div>
           <div className="flex items-baseline space-x-2">
@@ -75,7 +75,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ metrics, organType }) =>
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
             <span>IoU / Jaccard: <strong className="text-slate-700 font-mono">{(metrics.iou * 100).toFixed(1)}%</strong></span>
-            <span>Conf: <strong className="text-slate-700 font-mono">{(metrics.confidence * 100).toFixed(1)}%</strong></span>
+            <span>Conf (this image): <strong className="text-slate-700 font-mono">{(metrics.confidence * 100).toFixed(1)}%</strong></span>
           </div>
         </div>
 
@@ -87,7 +87,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ metrics, organType }) =>
               Inference Latency
             </span>
             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 font-mono">
-              Real-Time
+              Live
             </span>
           </div>
           <div className="flex items-baseline space-x-2">
@@ -96,7 +96,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ metrics, organType }) =>
             </span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Compute: <strong className="text-slate-700 font-mono">{metrics.flops_gflops || 0.082} GFLOPs</strong></span>
+            <span>Compute: <strong className="text-slate-700 font-mono">{metrics.flops_gflops ? `${metrics.flops_gflops} GFLOPs` : 'n/a'}</strong></span>
             <span>FPS: <strong className="text-slate-700 font-mono">~{Math.round(1000 / metrics.inference_time_ms)} FPS</strong></span>
           </div>
         </div>

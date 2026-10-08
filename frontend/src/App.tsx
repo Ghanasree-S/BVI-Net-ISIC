@@ -30,6 +30,7 @@ export default function App() {
   const [history, setHistory] = useState<PredictionResult[]>([]);
   const [isModelInfoOpen, setIsModelInfoOpen] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [predictError, setPredictError] = useState<string | null>(null);
 
   // Pre-load default sample on initial load if desired, or show clean empty state
   const handleOrganChange = (organ: OrganType) => {
@@ -39,6 +40,7 @@ export default function App() {
   // Perform segmentation prediction
   const handleProcessImage = async (imageBase64: string, fileName: string) => {
     setIsLoading(true);
+    setPredictError(null);
     try {
       const result = await predictLesion(selectedOrgan, imageBase64, fileName);
       setActiveResult(result);
@@ -50,6 +52,7 @@ export default function App() {
       });
     } catch (error) {
       console.error('Prediction failed:', error);
+      setPredictError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsLoading(false);
     }
@@ -84,6 +87,13 @@ export default function App() {
           selectedOrgan={selectedOrgan}
           onSelectOrgan={handleOrganChange}
         />
+
+        {predictError && !isLoading && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-start justify-between gap-3">
+            <span><strong>Prediction failed:</strong> {predictError}</span>
+            <button className="text-red-600 hover:text-red-800 font-semibold shrink-0" onClick={() => setPredictError(null)}>Dismiss</button>
+          </div>
+        )}
 
         {/* Loading State */}
         {isLoading && <LoadingSkeleton organType={selectedOrgan} />}
