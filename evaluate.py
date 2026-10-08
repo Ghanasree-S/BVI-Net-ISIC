@@ -111,10 +111,19 @@ def main():
                 save_triptych(img[0], mask[0], pred[0], out_dir / f"sample_{i:03d}.png")
 
     print(f"\n=== Test set results ({args.dataset}) ===")
+    results = {}
     for name in class_names:
         print(f" -- {name} --")
+        results[name] = {}
         for k, vals in accum[name].items():
-            print(f"{k:>12}: {np.mean(vals):.4f}")
+            results[name][k] = float(np.mean(vals))
+            print(f"{k:>12}: {results[name][k]:.4f}")
+
+    # Test-set metrics for the backend to report alongside live predictions
+    # (a new upload has no ground truth, so its own Dice can't be computed).
+    with open(out_dir / "metrics.json", "w") as f:
+        json.dump({"dataset": args.dataset, "num_test": len(test_ds), "per_class": results}, f, indent=2)
+    print(f"Saved {out_dir / 'metrics.json'}")
 
 
 if __name__ == "__main__":
