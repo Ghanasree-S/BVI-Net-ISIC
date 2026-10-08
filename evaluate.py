@@ -2,6 +2,7 @@
 as Table V of the paper. Optionally saves qualitative image/GT/prediction triptychs.
 """
 import argparse
+import json
 from pathlib import Path
 
 import cv2
@@ -91,8 +92,7 @@ def main():
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
 
     out_dir = Path(args.out_dir)
-    if args.visualize:
-        out_dir.mkdir(exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     class_names = organ["class_names"]
     accum = {name: {k: [] for k in ("dice", "miou", "accuracy", "specificity", "sensitivity", "assd")}
