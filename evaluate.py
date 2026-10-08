@@ -97,10 +97,15 @@ def main():
     class_names = organ["class_names"]
     accum = {name: {k: [] for k in ("dice", "miou", "accuracy", "specificity", "sensitivity", "assd")}
              for name in class_names}
+    inter = torch.zeros(len(class_names), device=device)
+    denom = torch.zeros(len(class_names), device=device)
     with torch.no_grad():
         for i, (img, mask) in enumerate(tqdm(test_loader, desc="evaluating")):
             img, mask = img.to(device), mask.to(device)
             pred = model(img)
+            binary = (pred > 0.5).float()
+            inter += (binary * mask).sum(dim=(0, 2, 3))
+            denom += binary.sum(dim=(0, 2, 3)) + mask.sum(dim=(0, 2, 3))
             per_class = per_class_metrics(pred, mask, class_names)
             for name, m in per_class.items():
                 for k, v in m.items():
@@ -118,6 +123,11 @@ def main():
         for k, vals in accum[name].items():
             results[name][k] = float(np.mean(vals))
             print(f"{k:>12}: {results[name][k]:.4f}")
+        # Dice over all test pixels at once: per-image Dice scores an empty
+        # slice as 1.0 when nothing is predicted, which inflates small classes.
+        c = class_names.index(name)
+        results[name]["global_dice"] = float((2 * inter[c] + 1e-6) / (denom[c] + 1e-6))
+        print(f"{'global_dice':>12}: {results[name]['global_dice']:.4f}")
 
     # Test-set metrics for the backend to report alongside live predictions
     # (a new upload has no ground truth, so its own Dice can't be computed).

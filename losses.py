@@ -4,16 +4,23 @@ import torch.nn as nn
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, smooth=1e-6):
+    def __init__(self, smooth=1e-6, per_sample=True):
         """Builds the Dice loss.
 
         Hyperparameters:
             smooth (float, default=1e-6): small constant added to numerator
                 and denominator to avoid division-by-zero when a mask is
                 entirely empty (no lesion pixels).
+            per_sample (bool, default=True): True = Dice per sample and
+                channel (skin). False = Dice per channel pooled over the
+                whole batch (liver/brain): with per-sample Dice, every slice
+                whose tumor/ET channel is empty is only satisfied by an
+                exactly-zero prediction, which collapsed the small classes to
+                "predict nothing" (tumor sensitivity 0.0 on LiTS).
         """
         super().__init__()
         self.smooth = smooth
+        self.per_sample = per_sample
 
     def forward(self, pred, target):
         """Computes 1 - Dice coefficient between predicted and target masks.
@@ -31,8 +38,12 @@ class DiceLoss(nn.Module):
         # small classes (liver TUMOR, brain ET) weigh as much as large ones
         # (liver, WT) instead of being swamped by them. For the single-channel
         # skin model this is identical to a plain per-sample Dice.
-        pred = pred.flatten(2)      # (B, C, H*W)
-        target = target.flatten(2)
+        if self.per_sample:
+            pred = pred.flatten(2)      # (B, C, H*W)
+            target = target.flatten(2)
+        else:
+            pred = pred.transpose(0, 1).flatten(1).unsqueeze(0)  # (1, C, B*H*W)
+            target = target.transpose(0, 1).flatten(1).unsqueeze(0)
         intersection = (pred * target).sum(dim=2)
         union = pred.sum(dim=2) + target.sum(dim=2)
         dice = (2 * intersection + self.smooth) / (union + self.smooth)
@@ -40,7 +51,7 @@ class DiceLoss(nn.Module):
 
 
 class BCEDiceLoss(nn.Module):
-    def __init__(self, lambda1=1.0, lambda2=1.0):
+    def __init__(self, lambda1=1.0, lambda2=1.0, per_sample_dice=True):
         """Builds the combined loss (Eq. 9 of the paper: Loss = lambda1*BCE + lambda2*Dice).
 
         Hyperparameters:
@@ -52,7 +63,7 @@ class BCEDiceLoss(nn.Module):
         """
         super().__init__()
         self.bce = nn.BCELoss()
-        self.dice = DiceLoss()
+        self.dice = DiceLoss(per_sample=per_sample_dice)
         self.lambda1 = lambda1
         self.lambda2 = lambda2
 
