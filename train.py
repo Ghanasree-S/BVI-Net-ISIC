@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from dataset import DATASETS
 from losses import BCEDiceLoss
-from metrics import mean_class_dice, per_class_metrics
+from metrics import per_class_metrics
 from models import BVINet
 from transforms import get_train_augment
 
@@ -34,7 +34,8 @@ def run_epoch(model, loader, criterion, optimizer, device, train=True):
         tuple[float, float]: (mean_loss, mean_dice) over every sample in the loader.
     """
     model.train(train)
-    total_loss, total_dice, n = 0.0, 0.0, 0
+    total_loss, n = 0.0, 0
+    inter, denom = 0.0, 0.0  # per-channel totals over the whole pass
     torch.set_grad_enabled(train)
     for img, mask in tqdm(loader, leave=False):
         img, mask = img.to(device), mask.to(device)
@@ -47,9 +48,16 @@ def run_epoch(model, loader, criterion, optimizer, device, train=True):
             optimizer.step()
 
         total_loss += loss.item() * img.size(0)
-        total_dice += mean_class_dice(pred.detach(), mask) * img.size(0)
         n += img.size(0)
-    return total_loss / n, total_dice / n
+        # Dice accumulated over the whole loader (per channel, then averaged)
+        # rather than averaged per batch: a batch with no tumor scores 1.0 by
+        # predicting nothing, which made the per-batch average noisy and
+        # rewarded a model that never predicts the small class.
+        binary = (pred.detach() > 0.5).float()
+        inter = inter + (binary * mask).sum(dim=(0, 2, 3))
+        denom = denom + binary.sum(dim=(0, 2, 3)) + mask.sum(dim=(0, 2, 3))
+    dice = ((2 * inter + 1e-6) / (denom + 1e-6)).mean().item()
+    return total_loss / n, dice
 
 
 def main():
@@ -119,7 +127,8 @@ def main():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} ({n_params / 1e6:.4f}M)")
 
-    criterion = BCEDiceLoss()  # lambda1 = lambda2 = 1.0 (Eq. 9 of the paper)
+    # lambda1 = lambda2 = 1.0 (Eq. 9 of the paper); batch-pooled Dice for multi-class organs
+    criterion = BCEDiceLoss(per_sample_dice=organ["num_classes"] == 1)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="max", factor=0.5, patience=3
