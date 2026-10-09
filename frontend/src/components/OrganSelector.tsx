@@ -24,14 +24,14 @@ export const OrganSelector: React.FC<OrganSelectorProps> = ({
     {
       id: 'liver',
       label: 'Liver (LiTS17)',
-      badge: 'Coming Soon',
-      isFunctional: false,
+      badge: 'Active Ready',
+      isFunctional: ORGAN_CONFIGS.liver.isAvailable,
     },
     {
       id: 'brain',
       label: 'Brain (BraTS19)',
-      badge: 'Coming Soon',
-      isFunctional: false,
+      badge: 'Active Ready',
+      isFunctional: ORGAN_CONFIGS.brain.isAvailable,
     },
   ];
 

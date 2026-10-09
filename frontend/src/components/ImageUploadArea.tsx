@@ -37,8 +37,14 @@ export const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
     if (!file) return;
 
     // Verify format
+    const isNpy = /\.npy$/i.test(file.name);
+    if (selectedOrgan === 'brain' && !isNpy) {
+      // The brain model needs 4 stacked MRI modalities, which a single image can't hold.
+      setErrorMsg('Brain model needs a 4-channel .npy slice (T1, T1ce, T2, FLAIR) from data/prepare_brats.py.');
+      return;
+    }
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/bmp'];
-    if (!validTypes.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|bmp)$/i)) {
+    if (!isNpy && !validTypes.includes(file.type) && !file.name.match(/\.(jpg|jpeg|png|webp|bmp)$/i)) {
       setErrorMsg('Please upload a valid medical image file (JPG, PNG, or WEBP).');
       return;
     }
@@ -131,7 +137,7 @@ export const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
           ref={fileInputRef}
           id="medical-file-input"
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/bmp"
+          accept={selectedOrgan === 'brain' ? '.npy' : 'image/jpeg,image/png,image/webp,image/bmp'}
           className="hidden"
           onChange={(e) => {
             if (e.target.files && e.target.files.length > 0) {
@@ -167,7 +173,7 @@ export const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
 
           <div className="mt-3 flex items-center space-x-4 text-[11px] text-slate-400 font-mono">
             <span>• Max file size: 25MB</span>
-            <span>• Auto-resized to 256×256</span>
+            <span>• Auto-resized to {currentConfig.resolution}</span>
             <span>• HIPAA Client-Side Safe</span>
           </div>
         </div>

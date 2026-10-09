@@ -12,7 +12,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({ organType }) =
   const [currentStep, setCurrentStep] = useState(0);
 
   const steps = [
-    { label: 'Ingesting 256×256 matrix & Bio-Visual Normalization', icon: <Eye className="w-3.5 h-3.5" /> },
+    { label: `Ingesting ${currentOrgan.resolution} input & normalization`, icon: <Eye className="w-3.5 h-3.5" /> },
     { label: 'Gabor Filter Bank Directional Feature Extraction', icon: <Cpu className="w-3.5 h-3.5" /> },
     { label: 'Mamba Selective State Space Global Pathway', icon: <Zap className="w-3.5 h-3.5" /> },
     { label: 'GCN Attention Lesion Boundary Aggregation', icon: <GitBranch className="w-3.5 h-3.5" /> },
@@ -49,7 +49,7 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({ organType }) =
 
         <div className="flex items-center space-x-2 text-xs font-mono bg-teal-50/70 text-teal-800 px-3 py-1.5 rounded-lg border border-teal-200">
           <span className="w-2 h-2 rounded-full bg-teal-500 animate-ping"></span>
-          <span>Latency &lt; 20ms Target</span>
+          <span>CPU inference: a few seconds</span>
         </div>
       </div>
 

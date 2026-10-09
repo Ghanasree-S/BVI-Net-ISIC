@@ -6,7 +6,8 @@ const RASTER_DATA_URL = /^data:image\/(png|jpe?g|webp|bmp);base64,/i;
 // The backend decodes images with OpenCV, which can't read SVG (the built-in
 // sample cases) or arbitrary URLs -- rasterize anything else to a PNG data URL.
 async function toRasterDataUrl(src: string): Promise<string> {
-  if (RASTER_DATA_URL.test(src) || src.startsWith('data:application/octet-stream')) return src;
+  // Raster images and raw .npy uploads (any non-SVG data URL) go to the backend as-is.
+  if (RASTER_DATA_URL.test(src) || (src.startsWith('data:') && !src.startsWith('data:image/svg'))) return src;
   const img = new Image();
   img.crossOrigin = 'anonymous';
   await new Promise<void>((resolve, reject) => {
@@ -49,7 +50,8 @@ export async function predictLesion(
     id: `pred_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     organ_type: organType,
     status: organConfig.isAvailable ? 'production_ready' : 'experimental_checkpoint',
-    original_image_url: image,
+    // .npy MRI slices can't be shown by <img>; the backend returns a FLAIR preview.
+    original_image_url: data.input_preview || image,
     mask_base64: data.mask_base64,
     metrics: data.metrics,
     model_info: data.model_info,
