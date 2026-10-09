@@ -1,0 +1,15 @@
+{
+  "dataset": "isic",
+  "num_test": 259,
+  "source": "Kaggle notebook95fe2ef1bb version 1 log (evaluate.py test-set output)",
+  "per_class": {
+    "lesion": {
+      "dice": 0.8631,
+      "miou": 0.7818,
+      "accuracy": 0.9520,
+      "specificity": 0.9709,
+      "sensitivity": 0.9016,
+      "assd": 7.3202
+    }
+  }
+}

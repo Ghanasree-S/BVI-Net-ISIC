@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 data/isic2018_raw/
 data/isic2018a/
-checkpoints/
+checkpoints/*
+!checkpoints/bvi_net_*_best.pt
+!checkpoints/bvi_net_*_metrics.json
 outputs/
 .ipynb_checkpoints/
+.claude/
