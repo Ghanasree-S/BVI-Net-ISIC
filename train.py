@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 from dataset import DATASETS
@@ -105,6 +105,12 @@ def main():
                      help="Override encoder channel widths, e.g. --channels 4 8 16 32 64 "
                           "to shrink the model toward the paper's claimed 0.026M params")
     ap.add_argument("--gcn_nodes", type=int, default=32)
+    ap.add_argument("--init_checkpoint", default=None,
+                    help="Start from these weights (fine-tuning) instead of random init")
+    ap.add_argument("--oversample_class", type=int, default=None,
+                    help="Output channel whose positive slices get sampled more often (1 = LiTS tumor)")
+    ap.add_argument("--oversample_factor", type=float, default=3.0,
+                    help="Sampling weight of slices containing --oversample_class (others = 1)")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -115,7 +121,18 @@ def main():
     train_ds = DatasetClass(args.data_dir, split="train",
                             augment=get_train_augment(organ["in_channels"]))
     val_ds = DatasetClass(args.data_dir, split="val")  # no augmentation for honest evaluation
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    if args.oversample_class is None:
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    else:
+        # Rare-class oversampling: liver tumor appears in a minority of slices, so
+        # weight those slices up (same epoch length, sampled with replacement).
+        plain = DatasetClass(args.data_dir, split="train")
+        has_pos = [bool(plain[i][1][args.oversample_class].any()) for i in range(len(plain))]
+        weights = [args.oversample_factor if p else 1.0 for p in has_pos]
+        sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, sampler=sampler, num_workers=2)
+        print(f"Oversampling class {args.oversample_class}: {sum(has_pos)}/{len(has_pos)} positive slices "
+              f"x{args.oversample_factor}")
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
 
     model = BVINet(
@@ -124,6 +141,9 @@ def main():
         channels=args.channels,
         gcn_nodes=args.gcn_nodes,
     ).to(device)
+    if args.init_checkpoint:
+        model.load_state_dict(torch.load(args.init_checkpoint, map_location=device))
+        print(f"Initialised from {args.init_checkpoint}")
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model parameters: {n_params:,} ({n_params / 1e6:.4f}M)")
 
