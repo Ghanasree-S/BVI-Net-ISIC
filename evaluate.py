@@ -75,6 +75,8 @@ def main():
     ap.add_argument("--channels", type=int, nargs=5, default=None,
                      help="Must match the widths used when the checkpoint was trained")
     ap.add_argument("--gcn_nodes", type=int, default=32)
+    ap.add_argument("--ablate", nargs="*", default=[], choices=["gabor", "global", "gcn"],
+                    help="Ablation: remove these components (Gabor bank / FA-VSSM pathway / GCN skips)")
     args = ap.parse_args()
 
     organ = DATASETS[args.dataset]
@@ -84,6 +86,7 @@ def main():
         num_classes=organ["num_classes"],
         channels=args.channels,
         gcn_nodes=args.gcn_nodes,
+        ablate=args.ablate,
     ).to(device)
     model.load_state_dict(torch.load(args.checkpoint, map_location=device))
     model.eval()

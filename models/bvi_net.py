@@ -47,7 +47,7 @@ CHANNELS = [8, 16, 32, 64, 128]  # default encoder widths (overridden by --chann
 class EncoderStage(nn.Module):
     """One resolution level: parallel Local + Global pathway, Global guides Local."""
 
-    def __init__(self, in_ch, out_ch, stage_role):
+    def __init__(self, in_ch, out_ch, stage_role, ablate=()):
         """Builds the Local Pathway block, the Global Pathway block, and pooling.
 
         Hyperparameters:
@@ -62,9 +62,15 @@ class EncoderStage(nn.Module):
                 use at this depth (see gabor_conv.py).
         """
         super().__init__()
-        self.local = LocalPathwayBlock(in_ch, out_ch, stage=stage_role)
-        self.global_in = nn.Conv2d(in_ch, out_ch, kernel_size=1)
-        self.global_path = FAVSSM(out_ch)
+        if "gabor" in ablate:  # ablation: plain 3x3 conv instead of the shared Gabor bank
+            self.local = nn.Sequential(nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                                       nn.BatchNorm2d(out_ch), nn.GELU())
+        else:
+            self.local = LocalPathwayBlock(in_ch, out_ch, stage=stage_role)
+        self.use_global = "global" not in ablate  # ablation: drop the FA-VSSM pathway
+        if self.use_global:
+            self.global_in = nn.Conv2d(in_ch, out_ch, kernel_size=1)
+            self.global_path = FAVSSM(out_ch)
         self.pool = nn.MaxPool2d(2)
 
     def forward(self, x):
@@ -83,11 +89,13 @@ class EncoderStage(nn.Module):
                     skip connection.
         """
         local_feat = self.local(x)                       # fine edge features
-        global_feat = self.global_path(self.global_in(x))  # fast global context
-
-        # Global Pathway guides Local Pathway to locate the lesion (multiplicative gating)
-        gate = torch.sigmoid(global_feat)
-        fused = local_feat * gate + local_feat             # residual-gated fusion
+        if not self.use_global:
+            fused = local_feat
+        else:
+            global_feat = self.global_path(self.global_in(x))  # fast global context
+            # Global Pathway guides Local Pathway to locate the lesion (multiplicative gating)
+            gate = torch.sigmoid(global_feat)
+            fused = local_feat * gate + local_feat             # residual-gated fusion
 
         skip = fused  # kept at this resolution for the skip connection
         down = self.pool(fused)
@@ -95,7 +103,7 @@ class EncoderStage(nn.Module):
 
 
 class DecoderStage(nn.Module):
-    def __init__(self, in_ch, skip_ch, out_ch, num_nodes=32):
+    def __init__(self, in_ch, skip_ch, out_ch, num_nodes=32, use_gcn=True):
         """Builds the upsampling transpose-conv, the GCN-attention skip
         module, and the post-concatenation fusion conv.
 
@@ -115,7 +123,8 @@ class DecoderStage(nn.Module):
         """
         super().__init__()
         self.up = nn.ConvTranspose2d(in_ch, skip_ch, kernel_size=2, stride=2)
-        self.gcn_skip = GCNAttention(skip_ch, num_nodes=num_nodes)
+        # ablation: use_gcn=False passes the encoder skip through unchanged (plain U-Net skip)
+        self.gcn_skip = GCNAttention(skip_ch, num_nodes=num_nodes) if use_gcn else nn.Identity()
         self.fuse = nn.Sequential(
             nn.Conv2d(skip_ch * 2, out_ch, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_ch),
@@ -152,7 +161,7 @@ class BVINet(nn.Module):
     guaranteed byte-for-byte match.
     """
 
-    def __init__(self, in_channels=3, num_classes=1, channels=None, gcn_nodes=32):
+    def __init__(self, in_channels=3, num_classes=1, channels=None, gcn_nodes=32, ablate=()):
         """Assembles the full 5-stage encoder-decoder.
 
         Hyperparameters (the ones actually swept in width_search.py / passed
@@ -176,14 +185,15 @@ class BVINet(nn.Module):
         channels = channels if channels is not None else CHANNELS  # override to shrink/grow the model
         chans = [in_channels] + channels
         self.encoders = nn.ModuleList([
-            EncoderStage(chans[i], chans[i + 1], STAGE_ROLES[i]) for i in range(len(channels))
+            EncoderStage(chans[i], chans[i + 1], STAGE_ROLES[i], ablate=ablate) for i in range(len(channels))
         ])
 
         # Decode from the bottleneck back up through all 5 skip levels (reverse order).
         rev = list(reversed(channels))
         decoder_out = rev[1:] + [rev[-1]]  # last stage keeps the smallest width for the head
         self.decoders = nn.ModuleList([
-            DecoderStage(in_ch=rev[i], skip_ch=rev[i], out_ch=decoder_out[i], num_nodes=gcn_nodes)
+            DecoderStage(in_ch=rev[i], skip_ch=rev[i], out_ch=decoder_out[i], num_nodes=gcn_nodes,
+                         use_gcn="gcn" not in ablate)
             for i in range(len(rev))
         ])
         self.head = nn.Conv2d(decoder_out[-1], num_classes, kernel_size=1)
