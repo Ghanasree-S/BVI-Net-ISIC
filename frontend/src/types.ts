@@ -7,6 +7,7 @@ export interface SampleCase {
   subType: string;
   description: string;
   imageUrl: string;
+  thumbnailUrl?: string; // shown on the sample card when imageUrl isn't an image (e.g. brain .npy)
   expectedMaskUrl?: string;
   resolution: string;
   provenance: string;

@@ -59,7 +59,7 @@ export default function App() {
   };
 
   const handleLoadSample = (sample: SampleCase) => {
-    handleProcessImage(sample.imageUrl, `${sample.title}.png`);
+    handleProcessImage(sample.imageUrl, `${sample.title}${sample.imageUrl.endsWith('.npy') ? '.npy' : '.png'}`);
   };
 
   const handleSelectHistoryItem = (item: PredictionResult) => {

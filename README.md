@@ -78,7 +78,9 @@ npm --prefix frontend install                      # once
 npm --prefix frontend run dev                      # terminal 2: dashboard on http://localhost:3000
 ```
 
-Pick an organ, upload a scan (or click a sample), and get the predicted mask, an overlay, the
+![Dashboard — brain MRI test slice](docs/dashboard_brain.jpg)
+
+Pick an organ, upload a scan (or click a sample) — every organ ships with real held-out test scans as one-click samples (`frontend/public/samples/`), and get the predicted mask, an overlay, the
 model's test-set scores, the confidence on this image, latency, parameters and GFLOPs.
 
 | Organ | Input expected |

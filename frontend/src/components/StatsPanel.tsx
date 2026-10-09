@@ -119,7 +119,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({ metrics, organType }) =>
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
             <span>Dataset: <strong className="text-slate-700 truncate max-w-[140px]">{currentOrgan.datasetName.split(':')[0]}</strong></span>
-            <span className="text-teal-700 font-semibold font-mono">99.1% &darr; vs UNet</span>
+            <span className="text-teal-700 font-semibold font-mono">{(100 * (1 - metrics.parameter_count / 31.0e6)).toFixed(1)}% &darr; vs UNet</span>
           </div>
         </div>
       </div>

@@ -8,6 +8,13 @@ const RASTER_DATA_URL = /^data:image\/(png|jpe?g|webp|bmp);base64,/i;
 async function toRasterDataUrl(src: string): Promise<string> {
   // Raster images and raw .npy uploads (any non-SVG data URL) go to the backend as-is.
   if (RASTER_DATA_URL.test(src) || (src.startsWith('data:') && !src.startsWith('data:image/svg'))) return src;
+  if (/\.npy$/i.test(src)) {
+    // Bundled brain sample: fetch the raw 4-channel array and send it as base64.
+    const buf = new Uint8Array(await (await fetch(src)).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return `data:application/octet-stream;base64,${btoa(bin)}`;
+  }
   const img = new Image();
   img.crossOrigin = 'anonymous';
   await new Promise<void>((resolve, reject) => {
