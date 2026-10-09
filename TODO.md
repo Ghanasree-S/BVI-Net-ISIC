@@ -23,9 +23,14 @@ Numbers below are held-out test sets; see README §1 for the full table.
 - [x] Real held-out demo samples for every organ (4 ISIC, 2 LiTS, 3 BraTS from different patients),
       exported by `notebooks/kaggle-export-samples.ipynb`; drawn placeholder samples removed.
 
+- [x] Liver fine-tune with tumor oversampling (`--init_checkpoint`, `--oversample_class`): small gain, adopted.
+- [x] GPU FPS benchmark (`benchmark.py`): skin 47, brain 46, liver 30 FPS on a Tesla T4.
+
 ## Remaining / nice-to-have
 
-- [ ] Liver tumor is the weakest class (0.566 global Dice): oversample tumor slices, use every
-      labelled slice, longer training.
-- [ ] GPU FPS benchmark vs. the paper's 292 FPS (CPU latency is ~4–16 s per image).
+- [ ] Liver tumor is still the weakest class (0.567 global Dice). Fine-tuning with 3× tumor-slice
+      oversampling (v8) gave only +0.001 global / +0.046 per-image Dice; next: every labelled slice,
+      tumor-only crops around the liver, or a dedicated tumor stage.
+- [ ] Speed: 30–47 FPS on a T4 vs. the paper's 292 FPS. The 4 scan directions now run as one batched
+      Mamba call (identical outputs); re-run  on a GPU to measure the gain.
 - [ ] Ablations (Gabor sharing / FA-VSSM / GCN skips) and BraTS HGG cases.

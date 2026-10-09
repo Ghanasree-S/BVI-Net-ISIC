@@ -358,8 +358,8 @@ Group Number: 19}
         \begin{tabular}{l|l|c|c|c}
             \hline
             \textbf{Task} & \textbf{Class} & \textbf{Global Dice} & \textbf{Per-image Dice} & \textbf{Params} \\ \hline
-            Liver & Liver & \textbf{92.77} & 83.79 & \multirow{2}{*}{0.0273M} \\
-                  & Tumor & 56.55 & 61.50 & \\ \hline
+            Liver & Liver & \textbf{92.84} & 82.75 & \multirow{2}{*}{0.0273M} \\
+                  & Tumor & 56.65 & 66.14 & \\ \hline
             Brain & WT    & \textbf{86.15} & 70.53 & \multirow{3}{*}{0.0273M} \\
             (LGG) & TC    & 71.06 & 59.33 & \\
                   & ET    & 74.44 & 75.33 & \\ \hline
@@ -391,11 +391,13 @@ Group Number: 19}
         \begin{tabular}{l|c|c}
             \hline
             \textbf{Test metric} & \textbf{Before} & \textbf{After} \\ \hline
-            Liver Dice (per-image)    & 70.81 & \textbf{83.79} \\ \hline
-            Tumor sensitivity         & 0.00  & \textbf{17.06} \\ \hline
+            Liver global Dice         & ---   & \textbf{92.84} \\ \hline
+            Tumor Dice (per-image)    & 61.88$^\ast$ & \textbf{66.14} \\ \hline
+            Tumor sensitivity         & 0.00  & \textbf{16.19} \\ \hline
             Brain ET Dice (per-image) & 57.21 & \textbf{75.33} \\ \hline
         \end{tabular}
     \end{table}
+    {\scriptsize $^\ast$ per-image Dice of a model that never predicts tumor --- inflated by tumor-free slices scored as 1.0.}
 \end{frame}
 
 \begin{frame}{Qualitative Results}
@@ -416,7 +418,9 @@ Group Number: 19}
               \textbf{parameter-compatible pure-PyTorch Mamba} (vectorised log-space
               selective scan).
         \item CPU masks match the Kaggle GPU predictions \textbf{pixel-for-pixel}.
-        \item CPU latency: skin $\approx$4\,s, brain $\approx$5\,s, liver $\approx$16\,s per image.
+        \item Speed (batch 1): Tesla T4 \textbf{47 / 46 / 30 FPS} (skin / brain / liver);
+              laptop CPU a few seconds per image. Paper: 292 FPS --- our 4 separate
+              Mamba calls per FA-VSSM block dominate at 27K parameters.
     \end{itemize}
     \begin{center}\includegraphics[width=0.62\textwidth]{imagens/dashboard}\end{center}
 \end{frame}
@@ -430,7 +434,7 @@ Group Number: 19}
     \begin{itemize}
         \item BVI-Net reimplemented with the real Mamba selective scan and true
               Gabor weight sharing, trained on \textbf{all three tasks}: skin
-              \textbf{86.31} Dice, liver \textbf{92.77} and brain WT \textbf{86.15}
+              \textbf{86.31} Dice, liver \textbf{92.84} and brain WT \textbf{86.15}
               global Dice.
 
         \medskip
@@ -460,11 +464,11 @@ Group Number: 19}
 
 \begin{frame}{Future Work}
     \begin{itemize}
-        \item Improve liver \textbf{tumor} segmentation (56.55 global Dice): tumor-slice
-              oversampling, all labelled slices, longer training.
+        \item Improve liver \textbf{tumor} segmentation (56.65 global Dice; tumor-slice
+              oversampling helped only slightly): all labelled slices, liver-cropped tumor stage.
         \item Ablation study: isolate contribution of Gabor weight sharing,
               FA-VSSM, and GCN-Attention skips individually.
-        \item GPU benchmark against the paper's 292 FPS; BraTS HGG cases.
+        \item Fuse the 4 scan directions into one batched Mamba call to approach 292 FPS; BraTS HGG cases.
     \end{itemize}
 \end{frame}
 

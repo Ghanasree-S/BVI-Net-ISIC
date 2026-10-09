@@ -197,16 +197,17 @@ class StateSpaceChannel(nn.Module):
         """
         b, c, h, w = x.shape
         flat = x.flatten(2).transpose(1, 2)  # (B, HW, C)
-        outs = []
-        for mode in self.MODES:
-            order = self._get_order(h, w, mode, x.device)
-            scanned = flat[:, order, :]
-            processed = self.ssm(scanned)
-            unscanned = torch.zeros_like(processed)
-            unscanned[:, order, :] = processed
-            outs.append(unscanned)
-        merged = torch.stack(outs, dim=0).mean(0)  # average the 4 scan directions
-        return merged.transpose(1, 2).view(b, c, h, w)
+        orders = [self._get_order(h, w, mode, x.device) for mode in self.MODES]
+        # The 4 scan directions are independent sequences: run them through the
+        # SSM as one batch of 4*B instead of 4 separate calls (identical result,
+        # far less per-call overhead for this tiny model).
+        scanned = torch.cat([flat[:, order, :] for order in orders], dim=0)  # (4B, HW, C)
+        processed = self.ssm(scanned).split(b, dim=0)
+        merged = torch.zeros_like(flat)
+        for order, out in zip(orders, processed):
+            merged[:, order, :] += out
+        merged = merged / len(orders)  # average the 4 scan directions
+        return merged.transpose(1, 2).reshape(b, c, h, w)
 
 
 class FastAttentionChannel(nn.Module):

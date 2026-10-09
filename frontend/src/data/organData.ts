@@ -66,7 +66,7 @@ export const ORGAN_CONFIGS: Record<OrganType, OrganConfig> = {
     datasetName: 'LiTS 2017: Liver Tumor Segmentation Challenge',
     shortLabel: 'Liver',
     isAvailable: true,
-    statusText: 'Active Checkpoint (test global Dice: liver 0.928, tumor 0.566)',
+    statusText: 'Active Checkpoint (test global Dice: liver 0.928, tumor 0.567)',
     inputHint: 'Upload an axial abdominal CT slice (grayscale PNG, liver window -100..400 HU)',
     modelParams: '27,277 parameters (0.11 MB)',
     paramCount: 27277,
