@@ -15,8 +15,8 @@ Every model has **~27K parameters (0.11 MB)** and uses the real Mamba selective 
 | Organ | Dataset / split | Params | Class | Dice | Global Dice¹ | mIoU | Sens. | Spec. |
 |---|---|---|---|---|---|---|---|---|
 | Skin | ISIC2018 — 2335 train / 100 official val / 259 test | 27,312 | Lesion | **0.863** | — | 0.782 | 0.902 | 0.971 |
-| Liver | LiTS17 — 131 volumes, 91/13/27 by patient, 3834 slices | 27,277 | Liver | 0.838 | **0.928** | 0.782 | 0.861 | 0.994 |
-| | | | Tumor | 0.615 | **0.566** | 0.580 | 0.171 | 0.999 |
+| Liver | LiTS17 — 131 volumes, 91/13/27 by patient, 3834 slices | 27,277 | Liver | 0.828 | **0.928** | 0.773 | 0.840 | 0.995 |
+| | | | Tumor | 0.661 | **0.567** | 0.627 | 0.162 | 0.999 |
 | Brain | BraTS19 LGG — 76 cases, 7:1:2 by patient, 2463 slices | 27,342 | WT | 0.705 | **0.862** | 0.626 | 0.710 | 0.996 |
 | | | | TC | 0.593 | **0.711** | 0.512 | 0.511 | 0.995 |
 | | | | ET | 0.753 | **0.744** | 0.722 | 0.162 | 1.000 |
@@ -27,7 +27,23 @@ the small classes (tumor, TC, ET) the global Dice is the trustworthy number. Ski
 in every image, so both coincide.
 
 Kaggle runs (notebook `notebooks/kaggle-multi-organ.ipynb`, GPU T4): skin = version 1,
-brain = version 6, liver = version 7. Metrics JSONs are in `checkpoints/bvi_net_<organ>_metrics.json`.
+brain = version 6, liver = version 7 + fine-tune with 3× tumor-slice oversampling (version 8). Metrics JSONs are in `checkpoints/bvi_net_<organ>_metrics.json`.
+
+---
+
+### Inference speed (batch 1, `benchmark.py`)
+
+| Organ | Input | Tesla T4 (Kaggle, CUDA Mamba) | Laptop CPU (Mamba port) |
+|---|---|---|---|
+| Skin | 256×256×3 | 21.2 ms — **47 FPS** | ~4 s |
+| Brain | 240×240×4 | 21.6 ms — **46 FPS** | ~5–11 s |
+| Liver | 448×448×1 | 33.9 ms — **30 FPS** | ~16–31 s |
+
+The paper reports 292 FPS. Our FA-VSSM calls Mamba once per scan direction (4×) with Python-side
+gather/scatter permutations, and a 27K-parameter network is dominated by that per-call overhead
+rather than by FLOPs.  now runs the 4 scans as one batched Mamba call (outputs
+identical to 2e-9); the T4 numbers above were measured before that change.
+Raw numbers: `docs/benchmark_gpu.json`.
 
 ---
 
