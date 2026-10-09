@@ -1,97 +1,31 @@
-# TODO — Final Review: Extending to Liver (LiTS17) and Brain (BraTS19)
+# Status — BVI-Net multi-organ replication
 
-Status: ISIC2018 (skin) segmentation is complete (Dice 0.8631, 27,312 params,
-within 5% of the paper's claimed 0.026M). This file tracks what's left for
-the two remaining tasks from the base paper, plus the frontend.
+All three tasks from the base paper are trained, evaluated and served in the dashboard.
+Numbers below are held-out test sets; see README §1 for the full table.
 
----
+## Done
 
-## 1. Liver — LiTS17
+- [x] **Skin (ISIC2018)** — Dice 0.863, 27,312 params (Kaggle v1).
+- [x] **Liver (LiTS17)** — global Dice liver 0.928 / tumor 0.566, 27,277 params (Kaggle v7,
+      `andrewmvd` mirror, stride 5, 3834 slices).
+- [x] **Brain (BraTS19 LGG)** — global Dice WT 0.862 / TC 0.711 / ET 0.744, 27,342 params (Kaggle v6).
+- [x] Small-class collapse fixed: batch-pooled Dice loss for multi-class organs, dataset-level
+      validation Dice for early stopping, `global_dice` in `evaluate.py` / metrics JSONs.
+- [x] `evaluate.py` writes `outputs/<organ>/metrics.json`; notebook packages checkpoints + metrics.
+- [x] CPU inference of real-Mamba checkpoints via `models/mamba_ref.py` (matches GPU masks
+      pixel-for-pixel on saved test samples).
+- [x] FastAPI backend: all organs, test-set metrics, per-image confidence, real params/GFLOPs,
+      `.npy` input + FLAIR preview for brain.
+- [x] Frontend wired to the backend (no simulated masks/metrics), overlay view, liver/brain enabled,
+      real LiTS17 test slices as samples, errors surfaced in the UI.
+- [x] README rewritten; slides (`ppt/main.tex`) updated with liver/brain results, the loss fix,
+      qualitative test images and the dashboard.
 
-- [ ] **Source the dataset.** Kaggle mirror found: `javariatahir123/lits17-liver-tumor-segmentation`.
-      131 CT volumes, NIfTI format (`.nii`/`.nii.gz`), ~58,638 total slices
-      across all volumes. Add via Kaggle "+ Add Input" like the ISIC dataset.
-      **Blocked on manual download — needs a Kaggle session, not doable from here.**
-- [x] **3D → 2D slicing script** (`data/prepare_lits.py`): loads `.nii`/`.nii.gz`
-      volumes via `nibabel`, slices into 2D axial images. Dry-run verified on
-      synthetic nested-folder volumes (finds files recursively, volume-level
-      split, labeled slices only); not yet run on the real Kaggle data.
-      `--slice_stride` (default 8; notebook uses 10) keeps every Nth slice so a
-      448x448 real-Mamba run fits a Kaggle session.
-- [x] **CT windowing / HU normalization:** liver window [-100, 400] HU clip
-      → normalize to [0,1], implemented in `hu_to_uint8()`.
-- [x] **Filter to labeled slices only:** `save_volume_slices()` discards
-      slices with no liver/tumor label (`--min_label_fraction`).
-- [x] **Two-label masks:** writes separate `masks_liver/` + `masks_tumor/`
-      folders; `LiTSDataset` in `dataset.py` stacks them as a (2, H, W)
-      multi-label target for `BVINet(num_classes=2)`.
-- [x] **Split:** volume-level 7:1:2 split in `prepare_lits.py` (shuffles
-      whole volumes before splitting, not slices — no leakage).
-- [x] **Resize to 448×448** — `SIZE = 448` in `prepare_lits.py`.
-- [x] **Retrain BVI-Net**: `train.py --dataset lits` now auto-selects
-      `LiTSDataset`, `in_channels=1`, `num_classes=2`. **Actually running
-      this still needs the dataset downloaded and a GPU training session.**
-- [x] **Report per-class Dice/mIoU**: `metrics.per_class_metrics()` added;
-      `train.py` prints a per-class (Liver/Tumor) breakdown on the best
-      checkpoint after training.
+## Remaining / nice-to-have
 
-## 2. Brain — BraTS19
-
-- [x] **Source the dataset.** Public Kaggle BraTS 2019 mirrors exist, no
-      registration wait: `aryashah2k/brain-tumor-segmentation-brats-2019`
-      (or `walidrehamnia/brain-tumor-segmentation-brats-2019-train-valid`).
-      Attach one via "+ Add Input" and confirm it has HGG/ + LGG/ case folders.
-- [x] **Multi-modal 3D → 2D slicing** (`data/prepare_brats.py`): stacks
-      T1/T1ce/T2/FLAIR as 4 input channels, z-score normalizes each
-      modality. Dry-run verified on synthetic cases (LGG-only filter, case-level
-      split); not yet run on the real mirror. `--slice_stride` default 2.
-- [x] **Three nested labels:** WT/TC/ET masks written separately;
-      `BraTSDataset` stacks them as (3, H, W) for `BVINet(num_classes=3)`.
-- [x] **Use only LGG cases**: `find_case_dirs(..., lgg_only=True)` is the
-      default filter. Case-level 7:1:2 split.
-- [x] **Resize to 240×240** — `SIZE = 240` in `prepare_brats.py`.
-- [x] **Retrain and evaluate**: `train.py --dataset brats` auto-selects
-      `BraTSDataset`, `in_channels=4`, `num_classes=3`, and prints the
-      WT/TC/ET per-class breakdown. **Still needs the approved dataset and
-      a GPU training session to actually run.**
-
-## 2b. Pre-flight fixes found by the synthetic dry-run (done)
-
-- [x] BraTS training would have crashed on ~30% of samples: `HueSaturationValue`
-      augmentation rejects 4-channel MRI. `get_train_augment(in_channels)` now
-      adds it for RGB only.
-- [x] Dice loss pooled all output channels, so the tiny Tumor / ET classes were
-      swamped by Liver / WT. Now per-channel Dice averaged (identical for the
-      1-channel skin model -- verified numerically).
-- [x] Early-stopping / checkpoint metric is now the per-class mean Dice
-      (`metrics.mean_class_dice`, identical to `dice_score` for skin).
-- [x] `train.py` prints per-epoch time, to budget Kaggle's 12 h session limit.
-- [x] `notebooks/kaggle-multi-organ.ipynb`: per-organ `--out_dir`, liver batch
-      size 4 (448x448 memory), real BraTS mirror named, recursive dataset
-      discovery, official-val skin reproduction.
-
-## 3. Frontend
-
-- [x] Dashboard prompt written for AI Studio (multi-organ tab selector:
-      Skin / Liver / Brain, skin fully wired, others show "coming soon"
-      until their models are ready).
-- [x] Backend API (`backend/app.py`, FastAPI) with `/predict` and
-      `/api/predict`: accepts `organ_type` + base64 image, loads the
-      matching `BVINet` checkpoint per organ (`ORGAN_CONFIG`), runs real
-      inference, returns mask + metrics as JSON. Response shape matches
-      `frontend/server.ts`'s mock payload so the frontend fetch call
-      doesn't need to change. Skin will work once `checkpoints/bvi_net_skin_best.pt`
-      is copied in; liver/brain 404 until their checkpoints exist (by design).
-- [ ] Wire the AI Studio frontend's mock `/predict` call (in `frontend/server.ts`)
-      to this real API — point it at `http://localhost:8000/predict` (run via
-      `uvicorn backend.app:app`) instead of `generateSyntheticMaskPng`.
-- [ ] Add overlay visualization (translucent mask on top of original image)
-      in the backend response or frontend rendering.
-
-## 4. Nice-to-haves (if time remains)
-
-- [ ] Inference speed (FPS) benchmark vs. paper's claimed 292 FPS.
-- [ ] Ablation table extending the width-search results (Dice at 0.66M vs
-      37K vs 27.3K params) into the final report/PPT.
-- [ ] Update `main.tex` with Liver/Brain results once available (new
-      slides: "Liver Results", "Brain Results", updated Conclusion).
+- [ ] Real ISIC + BraTS demo samples: run `notebooks/kaggle-export-samples.ipynb` on Kaggle (CPU,
+      no Mamba build) and copy `demo_samples.zip` contents into `frontend/public/samples/`.
+- [ ] Liver tumor is the weakest class (0.566 global Dice): oversample tumor slices, use every
+      labelled slice, longer training.
+- [ ] GPU FPS benchmark vs. the paper's 292 FPS (CPU latency is ~4–16 s per image).
+- [ ] Ablations (Gabor sharing / FA-VSSM / GCN skips) and BraTS HGG cases.

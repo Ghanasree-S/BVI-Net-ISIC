@@ -32,6 +32,7 @@
 \usepackage{amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{multirow}
 
 \DeclareMathOperator{\sen}{sen}
 \DeclareMathOperator{\tg}{tg}
@@ -333,10 +334,10 @@ Group Number: 19}
             \hline
             \textbf{Metric} & \textbf{Base Paper} & \textbf{Ours} & \textbf{Gap} \\ \hline
             Dice        & 90.43  & 86.31 & $-4.12$ \\ \hline
-            mIoU        & 82.45  & 78.55 & $-3.90$ \\ \hline
-            Accuracy    & 95.86  & \textbf{95.44} & $-0.42$ \\ \hline
-            Specificity & 97.15  & \textbf{97.80} & $+0.65$ \\ \hline
-            Sensitivity & 91.14  & 88.17 & $-2.97$ \\ \hline
+            mIoU        & 82.45  & 78.18 & $-4.27$ \\ \hline
+            Accuracy    & 95.86  & 95.20 & $-0.66$ \\ \hline
+            Specificity & 97.15  & 97.09 & $-0.06$ \\ \hline
+            Sensitivity & 91.14  & 90.16 & $-0.98$ \\ \hline
             \textbf{Params (M)} & \textbf{0.026} & \textbf{0.0273} & $+5\%$ \\ \hline
         \end{tabular}
         \caption{Skin lesion segmentation, ISIC2018 (all values in \%)}
@@ -344,18 +345,79 @@ Group Number: 19}
 
     \begin{itemize}
         \item Parameter count matches the paper's claim within 5\%.
-        \item Specificity exceeds the paper; Accuracy trails by under half a point.
-        \item Dice / mIoU / Sensitivity trail by $3$--$4$ points --- a
-              consistent, explainable gap.
+        \item Specificity, Accuracy and Sensitivity are within 1 point of the paper.
+        \item Dice / mIoU trail by about 4 points (our test set is self-carved:
+              ISIC's official test masks are not public).
     \end{itemize}
+\end{frame}
+
+\begin{frame}{Liver (LiTS17) and Brain (BraTS19) Results}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{l|l|c|c|c}
+            \hline
+            \textbf{Task} & \textbf{Class} & \textbf{Global Dice} & \textbf{Per-image Dice} & \textbf{Params} \\ \hline
+            Liver & Liver & \textbf{92.77} & 83.79 & \multirow{2}{*}{0.0273M} \\
+                  & Tumor & 56.55 & 61.50 & \\ \hline
+            Brain & WT    & \textbf{86.15} & 70.53 & \multirow{3}{*}{0.0273M} \\
+            (LGG) & TC    & 71.06 & 59.33 & \\
+                  & ET    & 74.44 & 75.33 & \\ \hline
+        \end{tabular}
+        \caption{Held-out test sets, patient-level 7:1:2 splits (values in \%)}
+    \end{table}
+    \begin{itemize}
+        \item \textbf{Global Dice} pools all test pixels per class --- trustworthy for
+              small classes, since per-image Dice scores a tumor-free slice as 1.0
+              when nothing is predicted.
+        \item Same 27K-parameter network for all three organs (1, 3 or 4 input channels).
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Fixing Small-Class Collapse}
+    \begin{itemize}
+        \item First liver run: tumor \textbf{sensitivity 0.00} --- the model never
+              predicted tumor; brain ET sensitivity 0.10.
+        \item Cause: \textbf{per-sample Dice loss}. On every tumor-free slice only an
+              exactly empty prediction scores well, so ``predict nothing'' wins.
+              Per-batch validation Dice then scored those batches as 1.0 and
+              stopped training early (epoch 12).
+        \item Fix: Dice pooled \textbf{per class over the batch}; validation and early
+              stopping on \textbf{dataset-level} Dice; more liver slices (stride 5).
+    \end{itemize}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{l|c|c}
+            \hline
+            \textbf{Test metric} & \textbf{Before} & \textbf{After} \\ \hline
+            Liver Dice (per-image)    & 70.81 & \textbf{83.79} \\ \hline
+            Tumor sensitivity         & 0.00  & \textbf{17.06} \\ \hline
+            Brain ET Dice (per-image) & 57.21 & \textbf{75.33} \\ \hline
+        \end{tabular}
+    \end{table}
 \end{frame}
 
 \begin{frame}{Qualitative Results}
     \begin{center}
-    % \includegraphics[width=0.9\textwidth]{imagens/qualitative}
+    \includegraphics[width=0.85\textwidth]{imagens/liver_qual}\\[2pt]
+    \includegraphics[width=0.62\textwidth]{imagens/brain_qual}
     \end{center}
-    {\footnotesize Left to right: input image, ground truth, prediction.
-    Predicted boundaries closely track ground truth on well-defined lesions.}
+    {\footnotesize Held-out test slices. Left to right: input, ground truth, prediction.
+    Top: liver CT (liver channel). Bottom: brain MRI (WT channel).}
+\end{frame}
+
+\begin{frame}{Deployment: Web Dashboard}
+    \begin{itemize}
+        \item \textbf{FastAPI backend} serves all three checkpoints; \textbf{React}
+              dashboard: pick organ, upload scan, view mask + overlay, test-set scores,
+              per-image confidence, latency, parameters and GFLOPs.
+        \item Kaggle checkpoints use CUDA \texttt{mamba\_ssm}; for CPU inference we wrote a
+              \textbf{parameter-compatible pure-PyTorch Mamba} (vectorised log-space
+              selective scan).
+        \item CPU masks match the Kaggle GPU predictions \textbf{pixel-for-pixel}.
+        \item CPU latency: skin $\approx$4\,s, brain $\approx$5\,s, liver $\approx$16\,s per image.
+    \end{itemize}
 \end{frame}
 
 
@@ -365,14 +427,18 @@ Group Number: 19}
 
 \begin{frame}{Conclusion}
     \begin{itemize}
-        \item BVI-Net reimplemented successfully with the real Mamba
-              selective-scan backend and true Gabor weight sharing; reaches
-              \textbf{86.31 Dice}.
+        \item BVI-Net reimplemented with the real Mamba selective scan and true
+              Gabor weight sharing, trained on \textbf{all three tasks}: skin
+              \textbf{86.31} Dice, liver \textbf{92.77} and brain WT \textbf{86.15}
+              global Dice.
 
         \medskip
 
-        \item Specificity \textbf{exceeds} the paper (97.80 vs.\ 97.15);
-              Accuracy trails by only 0.42 points.
+        \item Batch-pooled Dice fixed the small-class collapse (liver tumor, brain ET).
+
+        \medskip
+
+        \item Deployed as a working web dashboard with CPU inference.
 
         \medskip
 
@@ -393,12 +459,11 @@ Group Number: 19}
 
 \begin{frame}{Future Work}
     \begin{itemize}
-        \item Extend replication to \textbf{LiTS17} (liver) and
-              \textbf{BraTS19} (brain) tasks.
+        \item Improve liver \textbf{tumor} segmentation (56.55 global Dice): tumor-slice
+              oversampling, all labelled slices, longer training.
         \item Ablation study: isolate contribution of Gabor weight sharing,
               FA-VSSM, and GCN-Attention skips individually.
-        \item Build a \textbf{frontend web app} to upload a skin image and
-              view the predicted segmentation in real time.
+        \item GPU benchmark against the paper's 292 FPS; BraTS HGG cases.
     \end{itemize}
 \end{frame}
 
