@@ -32,5 +32,5 @@ Numbers below are held-out test sets; see README §1 for the full table.
       oversampling (v8) gave only +0.001 global / +0.046 per-image Dice; next: every labelled slice,
       tumor-only crops around the liver, or a dedicated tumor stage.
 - [ ] Speed: 30–47 FPS on a T4 vs. the paper's 292 FPS. The 4 scan directions now run as one batched
-      Mamba call (identical outputs); re-run  on a GPU to measure the gain.
+      Mamba call (identical outputs); re-run `benchmark.py` on a GPU to measure the gain.
 - [ ] Ablations (Gabor sharing / FA-VSSM / GCN skips) and BraTS HGG cases.

@@ -41,7 +41,7 @@ brain = version 6, liver = version 7 + fine-tune with 3× tumor-slice oversampli
 
 The paper reports 292 FPS. Our FA-VSSM calls Mamba once per scan direction (4×) with Python-side
 gather/scatter permutations, and a 27K-parameter network is dominated by that per-call overhead
-rather than by FLOPs.  now runs the 4 scans as one batched Mamba call (outputs
+rather than by FLOPs. `models/fa_vssm.py` now runs the 4 scans as one batched Mamba call (outputs
 identical to 2e-9); the T4 numbers above were measured before that change.
 Raw numbers: `docs/benchmark_gpu.json`.
 
