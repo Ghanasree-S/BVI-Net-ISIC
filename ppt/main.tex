@@ -400,6 +400,26 @@ Group Number: 19}
     {\scriptsize $^\ast$ per-image Dice of a model that never predicts tumor --- inflated by tumor-free slices scored as 1.0.}
 \end{frame}
 
+\begin{frame}{Ablation Study (ISIC2018)}
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{l|c|c|c}
+            \hline
+            \textbf{Variant} & \textbf{Params} & \textbf{Test Dice} & $\Delta$ \\ \hline
+            \textbf{Full BVI-Net} & 27,312 & \textbf{86.31} & --- \\ \hline
+            w/o GCN-attention skips & 25,360 & 84.56 & $-1.75$ \\ \hline
+            w/o FA-VSSM global pathway & 16,305 & 85.70 & $-0.61$ \\ \hline
+            w/o Gabor bank (plain conv) & 29,272 & 86.98 & $+0.67$ \\ \hline
+        \end{tabular}
+    \end{table}
+    \begin{itemize}
+        \item \textbf{GCN skips} matter most, then the global pathway.
+        \item A plain convolution matched the Gabor bank (+0.67, within run-to-run
+              noise) with 7\% more parameters --- the Gabor bank buys compactness.
+    \end{itemize}
+\end{frame}
+
 \begin{frame}{Qualitative Results}
     \begin{center}
     \includegraphics[width=0.85\textwidth]{imagens/liver_qual}\\[2pt]
@@ -418,9 +438,9 @@ Group Number: 19}
               \textbf{parameter-compatible pure-PyTorch Mamba} (vectorised log-space
               selective scan).
         \item CPU masks match the Kaggle GPU predictions \textbf{pixel-for-pixel}.
-        \item Speed (batch 1): Tesla T4 \textbf{47 / 46 / 30 FPS} (skin / brain / liver);
-              laptop CPU a few seconds per image. Paper: 292 FPS --- our 4 separate
-              Mamba calls per FA-VSSM block dominate at 27K parameters.
+        \item Speed (batch 1, Tesla T4): \textbf{87 / 84 / 44 FPS} (skin / brain / liver) after
+              batching the 4 scan directions into one Mamba call (1.5--1.8\$\times\$ faster);
+              paper: 292 FPS.
     \end{itemize}
     \begin{center}\includegraphics[width=0.62\textwidth]{imagens/dashboard}\end{center}
 \end{frame}
@@ -468,7 +488,8 @@ Group Number: 19}
               oversampling helped only slightly): all labelled slices, liver-cropped tumor stage.
         \item Ablation study: isolate contribution of Gabor weight sharing,
               FA-VSSM, and GCN-Attention skips individually.
-        \item Fuse the 4 scan directions into one batched Mamba call to approach 292 FPS; BraTS HGG cases.
+        \item Close the remaining speed gap to 292 FPS (fp16, CUDA graphs); BraTS HGG cases;
+              multi-seed ablations.
     \end{itemize}
 \end{frame}
 

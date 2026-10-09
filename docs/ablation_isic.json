@@ -1,0 +1,26 @@
+{
+  "dataset": "ISIC2018, same split as the main skin model (259 test images)",
+  "full": {
+    "params": 27312,
+    "dice": 0.8631,
+    "miou": 0.7818
+  },
+  "no_gcn": {
+    "params": 25360,
+    "dice": 0.8456,
+    "miou": 0.7597,
+    "global_dice": 0.8743
+  },
+  "no_global": {
+    "params": 16305,
+    "dice": 0.857,
+    "miou": 0.7742,
+    "global_dice": 0.8767
+  },
+  "no_gabor": {
+    "params": 29272,
+    "dice": 0.8698,
+    "miou": 0.7905,
+    "global_dice": 0.887
+  }
+}
