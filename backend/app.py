@@ -268,6 +268,12 @@ def predict(req: PredictRequest):
 
     start = time.time()
     img_tensor = decode_image(req.image, cfg["input_size"], cfg["in_channels"])
+    # A 4-channel MRI .npy can't be displayed by the browser -- send back the
+    # FLAIR channel (last) as a viewable preview for the overlay.
+    input_preview = None
+    if cfg["in_channels"] == 4:
+        flair = (img_tensor[0, -1].clamp(0, 1) * 255).byte().numpy()
+        input_preview = encode_mask_png(flair)
     with torch.no_grad():
         pred = model(img_tensor)  # (1, num_classes, H, W), sigmoid probabilities
     inference_ms = (time.time() - start) * 1000
@@ -290,9 +296,12 @@ def predict(req: PredictRequest):
         "organ_type": organ_type,
         "status": "production_ready",
         "mask_base64": channel_masks[cfg["class_names"][0]],
+        "input_preview": input_preview,
         "masks_by_class": channel_masks,
         "metrics": {
-            "dice": test.get("dice", 0.0),
+            # Dataset-level Dice when available (per-image Dice scores empty
+            # tumor slices as 1.0, inflating small classes).
+            "dice": test.get("global_dice", test.get("dice", 0.0)),
             "iou": test.get("miou", 0.0),
             "sensitivity": test.get("sensitivity", 0.0),
             "specificity": test.get("specificity", 0.0),
