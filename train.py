@@ -105,6 +105,8 @@ def main():
                      help="Override encoder channel widths, e.g. --channels 4 8 16 32 64 "
                           "to shrink the model toward the paper's claimed 0.026M params")
     ap.add_argument("--gcn_nodes", type=int, default=32)
+    ap.add_argument("--ablate", nargs="*", default=[], choices=["gabor", "global", "gcn"],
+                    help="Ablation: remove these components (Gabor bank / FA-VSSM pathway / GCN skips)")
     ap.add_argument("--init_checkpoint", default=None,
                     help="Start from these weights (fine-tuning) instead of random init")
     ap.add_argument("--oversample_class", type=int, default=None,
@@ -140,6 +142,7 @@ def main():
         num_classes=organ["num_classes"],
         channels=args.channels,
         gcn_nodes=args.gcn_nodes,
+        ablate=args.ablate,
     ).to(device)
     if args.init_checkpoint:
         model.load_state_dict(torch.load(args.init_checkpoint, map_location=device))
