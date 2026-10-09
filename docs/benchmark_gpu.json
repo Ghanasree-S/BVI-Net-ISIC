@@ -1,6 +1,31 @@
 {
   "device": "Tesla T4 (Kaggle), batch 1, fp32, real mamba_ssm",
-  "skin":  {"input": "256x256x3", "ms": 21.217, "fps": 47.1, "params": 27312},
-  "liver": {"input": "448x448x1", "ms": 33.858, "fps": 29.5, "params": 27277},
-  "brain": {"input": "240x240x4", "ms": 21.62,  "fps": 46.3, "params": 27342}
+  "batched_scan": {
+    "skin": {
+      "ms": 11.54,
+      "fps": 86.6
+    },
+    "liver": {
+      "ms": 22.88,
+      "fps": 43.7
+    },
+    "brain": {
+      "ms": 11.84,
+      "fps": 84.4
+    }
+  },
+  "sequential_scan": {
+    "skin": {
+      "ms": 21.217,
+      "fps": 47.1
+    },
+    "liver": {
+      "ms": 33.858,
+      "fps": 29.5
+    },
+    "brain": {
+      "ms": 21.62,
+      "fps": 46.3
+    }
+  }
 }

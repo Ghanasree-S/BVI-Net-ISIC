@@ -33,16 +33,30 @@ brain = version 6, liver = version 7 + fine-tune with 3× tumor-slice oversampli
 
 ### Inference speed (batch 1, `benchmark.py`)
 
-| Organ | Input | Tesla T4 (Kaggle, CUDA Mamba) | Laptop CPU (Mamba port) |
-|---|---|---|---|
-| Skin | 256×256×3 | 21.2 ms — **47 FPS** | ~4 s |
-| Brain | 240×240×4 | 21.6 ms — **46 FPS** | ~5–11 s |
-| Liver | 448×448×1 | 33.9 ms — **30 FPS** | ~16–31 s |
+| Organ | Input | T4, 4 sequential scans | **T4, batched scan (current)** | Laptop CPU (Mamba port) |
+|---|---|---|---|---|
+| Skin | 256×256×3 | 21.2 ms — 47 FPS | **11.5 ms — 87 FPS** | ~4 s |
+| Brain | 240×240×4 | 21.6 ms — 46 FPS | **11.8 ms — 84 FPS** | ~5–11 s |
+| Liver | 448×448×1 | 33.9 ms — 30 FPS | **22.9 ms — 44 FPS** | ~16–31 s |
 
-The paper reports 292 FPS. Our FA-VSSM calls Mamba once per scan direction (4×) with Python-side
-gather/scatter permutations, and a 27K-parameter network is dominated by that per-call overhead
-rather than by FLOPs. `models/fa_vssm.py` now runs the 4 scans as one batched Mamba call (outputs
-identical to 2e-9); the T4 numbers above were measured before that change.
+At 27K parameters the forward pass is dominated by per-call overhead, not FLOPs. Running the 4 scan
+directions of every FA-VSSM block as **one batched Mamba call** (`models/fa_vssm.py`, outputs identical
+to 2e-9) gave a 1.5–1.8× speed-up. The paper reports 292 FPS (hardware/implementation not specified).
+Raw numbers: `docs/benchmark_gpu.json`.
+
+### Ablation (ISIC2018, same split; `train.py --ablate ...`)
+
+| Variant | Params | Test Dice | Δ Dice | mIoU |
+|---|---|---|---|---|
+| **Full BVI-Net** | 27,312 | **0.8631** | — | 0.782 |
+| w/o GCN-attention skips (plain skip) | 25,360 | 0.8456 | **−1.75** | 0.760 |
+| w/o FA-VSSM global pathway | 16,305 | 0.8570 | −0.61 | 0.774 |
+| w/o Gabor bank (plain 3×3 conv) | 29,272 | 0.8698 | +0.67 | 0.791 |
+
+The GCN skips contribute most, then the global pathway. Replacing the weight-shared Gabor bank with
+an ordinary convolution was slightly *better* here (+0.67, within run-to-run noise of ~±0.5) at 7% more
+parameters — on this task the Gabor bank's benefit is compactness rather than accuracy.
+Raw numbers: `docs/ablation_isic.json`.
 Raw numbers: `docs/benchmark_gpu.json`.
 
 ---
