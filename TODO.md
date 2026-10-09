@@ -20,11 +20,11 @@ Numbers below are held-out test sets; see README §1 for the full table.
       real LiTS17 test slices as samples, errors surfaced in the UI.
 - [x] README rewritten; slides (`ppt/main.tex`) updated with liver/brain results, the loss fix,
       qualitative test images and the dashboard.
+- [x] Real held-out demo samples for every organ (4 ISIC, 2 LiTS, 3 BraTS from different patients),
+      exported by `notebooks/kaggle-export-samples.ipynb`; drawn placeholder samples removed.
 
 ## Remaining / nice-to-have
 
-- [ ] Real ISIC + BraTS demo samples: run `notebooks/kaggle-export-samples.ipynb` on Kaggle (CPU,
-      no Mamba build) and copy `demo_samples.zip` contents into `frontend/public/samples/`.
 - [ ] Liver tumor is the weakest class (0.566 global Dice): oversample tumor slices, use every
       labelled slice, longer training.
 - [ ] GPU FPS benchmark vs. the paper's 292 FPS (CPU latency is ~4–16 s per image).

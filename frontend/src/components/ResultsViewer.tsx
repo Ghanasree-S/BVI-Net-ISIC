@@ -235,7 +235,7 @@ export const ResultsViewer: React.FC<ResultsViewerProps> = ({
               </h4>
             </div>
             <span className="text-[11px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-              Input: RGB
+              Input: {result.model_info?.input_resolution || 'RGB'}
             </span>
           </div>
 

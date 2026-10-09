@@ -215,7 +215,7 @@ export const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
             >
               <div className="w-13 h-13 rounded-lg overflow-hidden border border-slate-300 shrink-0 bg-slate-900 relative shadow-2xs">
                 <img
-                  src={sample.imageUrl}
+                  src={sample.thumbnailUrl || sample.imageUrl}
                   alt={sample.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                 />
