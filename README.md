@@ -151,6 +151,9 @@ Kaggle's Python 3.13). Then skin ≈ 55 s/epoch, brain ≈ 37 s/epoch, liver ≈
   7:1:2 splits (no patient in two splits).
 - **Slice sampling.** Neighbouring CT/MRI slices are near-duplicates; to fit a Kaggle session we
   keep every 5th labelled LiTS slice and every 2nd tumor-bearing BraTS slice.
+- **Liver tumor is the weak spot** (0.567 global Dice). Tumor-slice oversampling helped slightly (adopted);
+  fine-tuning on 2.5x more slices (every 2nd) did not (liver 0.931 but tumor 0.554, not adopted). At 27K
+  parameters the small, low-contrast tumors likely need a cascaded liver-crop stage.
 - **Dice loss for multi-class organs.** Per-sample Dice on liver/brain made the model predict
   *no* tumor on every tumor-free slice (first liver run: tumor sensitivity 0.00). For multi-class
   organs the Dice term is pooled per class over the batch; validation/early stopping use the
