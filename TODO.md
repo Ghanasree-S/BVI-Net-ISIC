@@ -32,7 +32,8 @@ Numbers below are held-out test sets; see README §1 for the full table.
 ## Remaining / nice-to-have
 
 - [ ] Liver tumor is still the weakest class (0.567 global Dice). Fine-tuning with 3× tumor-slice
-      oversampling (v8) gave only +0.001 global / +0.046 per-image Dice; next: every labelled slice,
-      tumor-only crops around the liver, or a dedicated tumor stage.
+      oversampling (v8) gave only +0.001 global / +0.046 per-image Dice, and a further fine-tune on 2.5x more
+      slices (every 2nd, v9) raised liver to 0.931 but lowered tumor to 0.554 — not adopted. More slices of the
+      same kind don't help; next: tumor-only crops around the liver / a dedicated tumor stage, or a wider model.
 - [ ] Speed: 44–87 FPS on a T4 vs. the paper's 292 FPS — next: fp16 / CUDA graphs / torch.compile.
 - [ ] BraTS HGG cases; repeat ablations over several seeds (differences are near run-to-run noise).
